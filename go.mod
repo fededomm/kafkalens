@@ -1,6 +1,6 @@
 module kafkalens
 
-go 1.26.1
+go 1.26.9
 
 require (
 	github.com/twmb/franz-go v1.22.1

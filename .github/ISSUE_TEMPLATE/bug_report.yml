@@ -1,0 +1,44 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead. Screenshots welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a cluster with SASL SCRAM-SHA-512 + TLS
+        2. Open a topic and click Live tail
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: KafkaLens version
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode and OS
+      options: [Browser – Linux, Browser – macOS, Browser – Windows, Desktop – Linux, Desktop – macOS, Desktop – Windows]
+    validations:
+      required: true
+  - type: input
+    id: kafka
+    attributes:
+      label: Kafka version and setup
+      placeholder: Apache Kafka 4.1, 3 brokers, SASL_SSL
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error messages
+      description: Remove hostnames, usernames and anything sensitive first.
+      render: text

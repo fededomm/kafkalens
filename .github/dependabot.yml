@@ -1,0 +1,15 @@
+# Weekly dependency update PRs; GitHub Actions updates would have caught the Node 20 deprecation.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+    groups:
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

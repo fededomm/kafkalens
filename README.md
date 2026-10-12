@@ -1,6 +1,23 @@
 # KafkaLens
 
+[![ci](https://github.com/fededomm/kafkalens/actions/workflows/ci.yml/badge.svg)](https://github.com/fededomm/kafkalens/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/fededomm/kafkalens)](https://github.com/fededomm/kafkalens/releases/latest)
+[![license](https://img.shields.io/github/license/fededomm/kafkalens)](LICENSE)
+
 A fast, single-binary Apache Kafka GUI: Go backend ([franz-go](https://github.com/twmb/franz-go)) + Angular UI embedded in the binary.
+Runs in your browser or as a desktop app (Linux, Windows, macOS).
+
+## Download
+
+Get the latest build from [Releases](https://github.com/fededomm/kafkalens/releases/latest) and check it against `SHA256SUMS.txt`:
+
+| OS | File | Install |
+|---|---|---|
+| Linux | `kafkalens-linux-amd64.tar.gz` | `tar xzf kafkalens-linux-amd64.tar.gz && ./kafkalens` (needs `libwebkit2gtk-4.1`) |
+| Windows | `kafkalens-windows-amd64.exe` | Run it (needs WebView2, preinstalled on Windows 10/11) |
+| macOS | `KafkaLens-macos-universal.dmg` | Open it, drag KafkaLens to Applications |
+
+The binaries are not code-signed yet. Windows SmartScreen: *More info → Run anyway*. macOS: *System Settings → Privacy & Security → Open Anyway*, or `xattr -cr /Applications/KafkaLens.app`.
 
 ## Features
 
@@ -50,6 +67,14 @@ make kafka   # single-node Kafka (KRaft) on localhost:9092
 make dev     # Go API on :8088, Angular dev server on :4200 with /api proxied
 ```
 
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
+
 ## Not (yet) included
 
 Schema Registry (Avro/Protobuf decoding), Kafka Connect, ACL management, broker config editing.
+
+## License
+
+[Apache License 2.0](LICENSE)
