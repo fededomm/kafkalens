@@ -1,0 +1,92 @@
+<div class="shell">
+  <aside class="side">
+    <a class="brand" routerLink="/">
+      <app-icon name="logo" style="--size: 22px" />
+      <span>Kafka<b>Lens</b></span>
+    </a>
+
+    <div class="switcher" (keydown.escape)="switcherOpen.set(false)" (focusout)="!$any($event).relatedTarget?.closest('.switcher') && switcherOpen.set(false)">
+      <button class="switch-btn" (click)="switcherOpen.set(!switcherOpen())" [attr.aria-expanded]="switcherOpen()">
+        @if (cluster(); as c) {
+          <span class="cdot" [style.background]="c.color || 'var(--accent)'"></span>
+          <span class="cname">{{ c.name }}</span>
+          @if (c.readOnly) { <app-icon name="lock" class="dim" title="Read-only" /> }
+        } @else {
+          <span class="cname dim">Select a cluster</span>
+        }
+        <app-icon name="chevron" class="dim" />
+      </button>
+      @if (switcherOpen()) {
+        <div class="menu">
+          @for (c of api.clusters(); track c.id) {
+            <a [routerLink]="['/c', c.id]" (click)="switcherOpen.set(false)" [class.on]="c.id === clusterId()">
+              <span class="cdot" [style.background]="c.color || 'var(--accent)'"></span>
+              <span class="cname">{{ c.name }}</span>
+              <span class="dim mono">{{ c.brokers[0] }}</span>
+            </a>
+          }
+          <a routerLink="/" (click)="switcherOpen.set(false)" class="manage">
+            <app-icon name="settings" /> Manage clusters
+          </a>
+        </div>
+      }
+    </div>
+
+    @if (clusterId(); as id) {
+      <nav class="nav">
+        <a [routerLink]="['/c', id, 'overview']" routerLinkActive="on" ariaCurrentWhenActive="page"><app-icon name="overview" /> Overview</a>
+        <a [routerLink]="['/c', id, 'topics']" routerLinkActive="on" ariaCurrentWhenActive="page"><app-icon name="topics" /> Topics</a>
+        <a [routerLink]="['/c', id, 'groups']" routerLinkActive="on" ariaCurrentWhenActive="page"><app-icon name="groups" /> Consumer groups</a>
+      </nav>
+    }
+
+    <div class="spacer"></div>
+
+    <button class="palette-btn" (click)="openPalette()">
+      <app-icon name="search" /> <span>Jump to…</span> <kbd>Ctrl K</kbd>
+    </button>
+    <div class="side-foot">
+      <a routerLink="/" class="btn ghost sm"><app-icon name="server" /> Clusters</a>
+      <button class="btn ghost icon sm" (click)="toggleTheme()" [attr.aria-label]="'Switch to ' + (theme() === 'dark' ? 'light' : 'dark') + ' theme'">
+        <app-icon [name]="theme() === 'dark' ? 'sun' : 'moon'" />
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    @if (cluster()?.readOnly) {
+      <div class="ro-banner"><app-icon name="lock" /> Read-only cluster — write operations are disabled</div>
+    }
+    <router-outlet />
+  </main>
+</div>
+
+<dialog #palette class="dlg palette" (click)="$event.target === palette && palette.close()">
+  <div class="pal-input search">
+    <app-icon name="search" />
+    <input class="input" autofocus placeholder="Search topics, consumer groups, clusters…" aria-label="Search"
+      [ngModel]="query()" (ngModelChange)="query.set($event); active.set(0)" (keydown)="paletteKey($event)" />
+  </div>
+  <ul class="pal-list" role="listbox">
+    @for (it of results(); track it.hint + it.label; let i = $index) {
+      <li role="option" [attr.aria-selected]="i === active()" [class.on]="i === active()" (click)="go(it)" (mousemove)="active.set(i)">
+        <app-icon [name]="it.icon" class="dim" />
+        <span class="pal-label">{{ it.label }}</span>
+        <span class="dim pal-hint">{{ it.hint }}</span>
+      </li>
+    } @empty {
+      <li class="dim pal-empty">No matches</li>
+    }
+  </ul>
+  <div class="pal-foot dim"><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> open <kbd>Esc</kbd> close</div>
+</dialog>
+
+<div #toastLayer class="toasts" popover="manual" aria-live="polite">
+  @for (t of toasts.items(); track t.id) {
+    <div class="toast" [class.err]="t.kind === 'err'" role="status">
+      <app-icon [name]="t.kind === 'err' ? 'alert' : 'check'" />
+      <span>{{ t.text }}</span>
+      <button class="btn ghost icon sm" (click)="toasts.dismiss(t.id)" aria-label="Dismiss"><app-icon name="x" /></button>
+    </div>
+  }
+</div>

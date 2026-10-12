@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "KafkaLens",
+  "outputfilename": "kafkalens",
+  "frontend:dir": "web",
+  "frontend:install": "npm ci",
+  "frontend:build": "npx ng build",
+  "info": {
+    "productName": "KafkaLens",
+    "productVersion": "0.1.0",
+    "comments": "Apache Kafka GUI"
+  }
+}

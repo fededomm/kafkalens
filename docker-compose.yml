@@ -1,0 +1,39 @@
+# Local single-node Kafka (KRaft) for development: bootstrap localhost:9092
+# 3-node KRaft cluster for development: bootstrap localhost:9092,localhost:9094,localhost:9096
+x-kafka: &kafka
+  image: apache/kafka:4.1.0
+  environment: &env
+    CLUSTER_ID: kafkalens-dev-cluster1
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka1:9093,2@kafka2:9093,3@kafka3:9093
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+    KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+services:
+  kafka1:
+    <<: *kafka
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      <<: *env
+      KAFKA_NODE_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:19092,EXTERNAL://localhost:9092
+  kafka2:
+    <<: *kafka
+    ports: ["127.0.0.1:9094:9092"]
+    environment:
+      <<: *env
+      KAFKA_NODE_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:19092,EXTERNAL://localhost:9094
+  kafka3:
+    <<: *kafka
+    ports: ["127.0.0.1:9096:9092"]
+    environment:
+      <<: *env
+      KAFKA_NODE_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka3:19092,EXTERNAL://localhost:9096

@@ -1,0 +1,50 @@
+# Builds the Wails desktop app on native runners (macOS can only be built on macOS).
+# Run it from the Actions tab, or push a v* tag; binaries are attached as artifacts.
+name: desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux/amd64
+            tags: webkit2_41
+          - os: windows-latest
+            platform: windows/amd64
+            tags: ""
+          - os: macos-latest
+            platform: darwin/universal
+            tags: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Linux deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+      - run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+      - if: runner.os != 'macOS'
+        run: wails build -platform ${{ matrix.platform }} -tags "${{ matrix.tags }}" -trimpath -clean -skipbindings
+      # app + .dmg via the Makefile; only the .dmg ships because artifact zips
+      # drop the executable bit that the bare .app needs
+      - name: macOS app and installer (.dmg)
+        if: runner.os == 'macOS'
+        run: make desktop-macos && rm -rf build/bin/KafkaLens.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kafkalens-${{ runner.os }}
+          path: build/bin/
