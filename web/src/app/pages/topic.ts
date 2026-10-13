@@ -1,7 +1,7 @@
 import { afterNextRender, Component, computed, DestroyRef, effect, ElementRef, Injector, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Api, BrowseReq, BrowseResp, Header, KRecord, Toasts, TopicDetail } from '../api';
+import { Api, BrowseReq, BrowseResp, Favorites, Header, KRecord, Toasts, TopicDetail } from '../api';
 import { BytesPipe, download, highlightJson, NumPipe, prettyJson, TimePipe } from '../fmt';
 import { Icon } from '../icon';
 import { ConfigTable } from './config-table';
@@ -19,6 +19,7 @@ export class TopicPage {
   readonly id = input.required<string>();
   readonly topic = input.required<string>();
   private readonly api = inject(Api);
+  protected readonly fav = inject(Favorites);
   private readonly toasts = inject(Toasts);
   private readonly router = inject(Router);
   private readonly produceDlg = viewChild.required<ElementRef<HTMLDialogElement>>('produceDlg');

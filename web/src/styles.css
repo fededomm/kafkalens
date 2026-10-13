@@ -271,3 +271,8 @@ pre.code {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* favorite toggle (a .btn.ghost): outline star, filled amber when on */
+.btn.ghost.star { color: var(--text-3); }
+.btn.ghost.star:hover:not(:disabled), .btn.ghost.star.on { color: var(--warn); }
+.btn.ghost.star.on svg { fill: currentColor; }

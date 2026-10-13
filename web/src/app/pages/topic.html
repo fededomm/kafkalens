@@ -2,7 +2,12 @@
   <header class="page-head">
     <div class="title">
       <nav class="crumbs dim"><a [routerLink]="['/c', id(), 'topics']">Topics</a> <app-icon name="chevron-right" /></nav>
-      <h1 class="mono">{{ topic() }}</h1>
+      <div class="row">
+        <h1 class="mono">{{ topic() }}</h1>
+        <button class="btn ghost icon sm star" [class.on]="fav.has(id(), topic())" (click)="fav.toggle(id(), topic())"
+          [attr.aria-pressed]="fav.has(id(), topic())" [title]="fav.has(id(), topic()) ? 'Remove from favorites' : 'Add to favorites'"
+          aria-label="Favorite topic"><app-icon name="star" /></button>
+      </div>
       <div class="row wrap facts">
         <span class="badge">{{ detail()?.partitions?.length ?? '…' }} partitions</span>
         <span class="badge">RF {{ replication() || '…' }}</span>

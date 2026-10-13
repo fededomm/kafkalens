@@ -102,6 +102,29 @@ export class Api {
   }
 }
 
+/** Starred topics per cluster, kept in this browser's localStorage (not shared between browser and desktop modes). */
+@Injectable({ providedIn: 'root' })
+export class Favorites {
+  private readonly byCluster = signal<Record<string, string[]>>(Favorites.read());
+
+  private static read(): Record<string, string[]> {
+    try { return JSON.parse(localStorage.getItem('favorites') ?? '{}'); } catch { return {}; }
+  }
+
+  has(cluster: string, topic: string) { return this.byCluster()[cluster]?.includes(topic) ?? false; }
+
+  /** All favorites of a cluster, for bulk checks (filters, sorting). */
+  set(cluster: string) { return new Set(this.byCluster()[cluster]); }
+
+  toggle(cluster: string, topic: string) {
+    this.byCluster.update((m) => {
+      const l = m[cluster] ?? [];
+      return { ...m, [cluster]: l.includes(topic) ? l.filter((t) => t !== topic) : [...l, topic] };
+    });
+    localStorage.setItem('favorites', JSON.stringify(this.byCluster()));
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class Toasts {
   readonly items = signal<{ id: number; kind: 'ok' | 'err'; text: string }[]>([]);

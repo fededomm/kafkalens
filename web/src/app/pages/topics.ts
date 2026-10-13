@@ -1,11 +1,14 @@
-import { Component, computed, effect, ElementRef, inject, input, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Api, Toasts, TopicRow } from '../api';
+import { Api, Favorites, Toasts, TopicRow } from '../api';
 import { NumPipe } from '../fmt';
 import { Icon } from '../icon';
 
 type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
+
+// rows rendered per step: building thousands of table rows at once costs seconds
+const PAGE = 200;
 
 @Component({
   selector: 'app-topics',
@@ -31,7 +34,10 @@ type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
         <app-icon name="search" />
         <input class="input" placeholder="Filter topics…  (regex allowed)" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Filter topics" />
       </div>
-      <label class="check"><input type="checkbox" [ngModel]="showInternal()" (ngModelChange)="showInternal.set($event)" /> Show internal</label>
+      <div class="row toggles">
+        <label class="check"><input type="checkbox" [ngModel]="favOnly()" (ngModelChange)="favOnly.set($event)" /> Favorites only</label>
+        <label class="check"><input type="checkbox" [ngModel]="showInternal()" (ngModelChange)="showInternal.set($event)" /> Show internal</label>
+      </div>
     </div>
 
     @if (error(); as e) { <div class="alert err m"><app-icon name="alert" /> {{ e }}</div> }
@@ -40,6 +46,7 @@ type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
       <table class="t">
         <thead>
           <tr>
+            <th class="fav"></th>
             <th class="sortable" (click)="sortBy('name')">Name<span class="arrow">{{ arrow('name') }}</span></th>
             <th class="sortable num" (click)="sortBy('partitions')">Partitions<span class="arrow">{{ arrow('partitions') }}</span></th>
             <th class="sortable num" (click)="sortBy('replicationFactor')">Replicas<span class="arrow">{{ arrow('replicationFactor') }}</span></th>
@@ -49,8 +56,12 @@ type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
           </tr>
         </thead>
         <tbody>
-          @for (t of visible(); track t.name) {
+          @for (t of shown(); track t.name) {
             <tr class="clickable" (click)="open(t)">
+              <td class="fav">
+                <button class="btn ghost icon sm star" [class.on]="fav.has(id(), t.name)" (click)="$event.stopPropagation(); fav.toggle(id(), t.name)"
+                  [attr.aria-pressed]="fav.has(id(), t.name)" [attr.aria-label]="'Favorite ' + t.name"><app-icon name="star" /></button>
+              </td>
               <td class="name">
                 <a [routerLink]="[t.name]" (click)="$event.stopPropagation()">{{ t.name }}</a>
                 @if (t.internal) { <span class="badge sm-badge">internal</span> }
@@ -70,10 +81,17 @@ type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
             </tr>
           } @empty {
             @if (loading() && !topics()) {
-              @for (i of [1, 2, 3, 4, 5]; track i) { <tr><td colspan="6"><div class="skeleton"></div></td></tr> }
+              @for (i of [1, 2, 3, 4, 5]; track i) { <tr><td colspan="7"><div class="skeleton"></div></td></tr> }
             } @else {
-              <tr><td colspan="6"><div class="empty"><app-icon name="inbox" /><strong>No topics</strong><span>Nothing matches the current filter.</span></div></td></tr>
+              <tr><td colspan="7"><div class="empty"><app-icon name="inbox" /><strong>No topics</strong><span>Nothing matches the current filter.</span></div></td></tr>
             }
+          }
+          @if (shown().length < visible().length) {
+            <tr class="more"><td colspan="7">
+              <button class="btn ghost sm" (click)="limit.set(limit() + PAGE * 5)">
+                Show more <span class="dim">({{ shown().length | num }} of {{ visible().length | num }})</span>
+              </button>
+            </td></tr>
           }
         </tbody>
       </table>
@@ -133,15 +151,19 @@ type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
   styles: `
 .grow { flex: 1; max-width: 420px; }
 .sm-badge { margin-left: 8px; height: 18px; font-size: 10.5px; }
-.acts { width: 1%; }
+.acts, .fav { width: 1%; }
+td.fav { padding-right: 0; }
 .healthy { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
 .healthy .dot { color: var(--ok); }
 .m { margin: 12px 14px; }
+.more td { text-align: center; padding: 10px; }
+.toggles { gap: 18px; }
 `,
 })
 export class TopicsPage {
   readonly id = input.required<string>();
   private readonly api = inject(Api);
+  protected readonly fav = inject(Favorites);
   private readonly toasts = inject(Toasts);
   private readonly router = inject(Router);
   private readonly createDlg = viewChild.required<ElementRef<HTMLDialogElement>>('createDlg');
@@ -153,6 +175,7 @@ export class TopicsPage {
   protected readonly error = signal<string | null>(null);
   protected readonly q = signal('');
   protected readonly showInternal = signal(false);
+  protected readonly favOnly = signal(false);
   protected readonly sort = signal<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 });
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
 
@@ -161,10 +184,18 @@ export class TopicsPage {
     let re: RegExp | null = null;
     try { re = q ? new RegExp(q, 'i') : null; } catch { re = null; }
     const { key, dir } = this.sort();
+    const favs = this.fav.set(this.id());
+    const fav = (t: TopicRow) => favs.has(t.name);
     return (this.topics() ?? [])
-      .filter((t) => (this.showInternal() || !t.internal) && (!q || (re ? re.test(t.name) : t.name.includes(q))))
-      .sort((a, b) => (a[key] < b[key] ? -dir : a[key] > b[key] ? dir : 0));
+      .filter((t) => (this.showInternal() || !t.internal) && (!this.favOnly() || fav(t)) && (!q || (re ? re.test(t.name) : t.name.includes(q))))
+      // favorites stay pinned on top, each group in the chosen order
+      .sort((a, b) => Number(fav(b)) - Number(fav(a)) || (a[key] < b[key] ? -dir : a[key] > b[key] ? dir : 0));
   });
+
+  // back to the first page whenever the filtered/sorted list changes
+  protected readonly limit = linkedSignal(() => (this.visible(), PAGE));
+  protected readonly shown = computed(() => this.visible().slice(0, this.limit()));
+  protected readonly PAGE = PAGE;
 
   protected nt = { name: '', partitions: null as number | null, replicationFactor: null as number | null, cleanup: '', retention: '' };
   protected readonly toDelete = signal<TopicRow | null>(null);

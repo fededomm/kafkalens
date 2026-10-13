@@ -9,7 +9,7 @@ Runs in your browser or as a desktop app (Linux, Windows, macOS).
 
 ## Download
 
-Get the latest build from [Releases](https://github.com/fededomm/kafkalens/releases/latest) and check it against `SHA256SUMS.txt`:
+Get the latest build from [Releases](https://github.com/fededomm/kafkalens/releases/latest) and check it against `SHA256SUMS.txt`. What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 | OS | File | Install |
 |---|---|---|
@@ -23,7 +23,7 @@ The binaries are not code-signed yet. Windows SmartScreen: *More info → Run an
 
 - **Clusters** — multiple connections, PLAINTEXT/TLS (custom CA, mTLS), SASL PLAIN/SCRAM-256/512, connection test, color tag, **read-only mode** (blocks writes from the UI; a guard against mistakes, not access control — restrict the SASL user with broker ACLs)
 - **Overview** — brokers, controller, partition leadership, under-replicated/offline partitions, broker configs
-- **Topics** — search (regex), sort, message counts, health, create (partitions/RF/retention/cleanup), delete with typed confirmation
+- **Topics** — search (regex), sort, message counts, health, ★ favorites pinned on top (per cluster, stored in the browser), create (partitions/RF/retention/cleanup), delete with typed confirmation
 - **Messages** — browse newest/oldest/from offset/from time, per partition, server-side filter on key/value/headers, JSON pretty-print + highlighting, headers, copy, export JSON, **live tail** (SSE), re-send a message
 - **Produce** — key/null key, value with JSON validation/format, headers, target partition, N copies
 - **Topic admin** — partitions (leader/replicas/ISR/offsets), add partitions, edit/reset configs, consumers with lag
