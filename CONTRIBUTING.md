@@ -19,7 +19,7 @@ make build   # browser-mode binary in bin/
 make desktop # desktop app in build/bin/ (Linux)
 ```
 
-Layout: `api.go` (REST routes), `kafka.go` (franz-go client, browse), `store.go` (saved clusters), `server.go` / `desktop.go` (browser and Wails entry points), `web/` (Angular UI).
+Layout: `api.go` (REST routes), `kafka.go` (franz-go client, browse), `store.go` (saved clusters), `server.go` / `desktop.go` (browser and Wails entry points), `web/` (Angular UI). Diagrams: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Checks
 

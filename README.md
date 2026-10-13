@@ -69,7 +69,7 @@ make dev     # Go API on :8088, Angular dev server on :4200 with /api proxied
 
 ## Contributing
 
-Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the pieces fit together. Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## Not (yet) included
 
