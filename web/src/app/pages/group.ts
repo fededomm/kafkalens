@@ -3,12 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Api, GroupDetail, Toasts } from '../api';
 import { NumPipe } from '../fmt';
+import { DateTime } from '../datetime';
 import { Icon } from '../icon';
 import { stateClass } from './groups';
 
 @Component({
   selector: 'app-group',
-  imports: [FormsModule, RouterLink, NumPipe, Icon],
+  imports: [FormsModule, RouterLink, NumPipe, Icon, DateTime],
   template: `
 <div class="page">
   <header class="page-head">
@@ -122,7 +123,7 @@ import { stateClass } from './groups';
           <label class="field full"><span>Offset</span><input class="input mono" type="number" min="0" name="off" [(ngModel)]="rs.offset" /></label>
         }
         @if (rs.to === 'timestamp') {
-          <label class="field full"><span>Date & time</span><input class="input" type="datetime-local" step="1" name="ts" [(ngModel)]="rs.time" /></label>
+          <div class="field full"><span>Date & time</span><app-datetime name="ts" label="Date & time" [(ngModel)]="rs.time" /></div>
         }
       </div>
     </div>

@@ -14,6 +14,8 @@ import { Icon } from '../icon';
     <input class="input" placeholder="Filter configs…" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Filter configs" />
   </div>
   <label class="check"><input type="checkbox" [ngModel]="onlyOverrides()" (ngModelChange)="onlyOverrides.set($event)" /> Overrides only</label>
+  <span class="spacer"></span>
+  <ng-content />
 </div>
 <div class="table-wrap">
   <table class="t">

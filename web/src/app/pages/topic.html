@@ -16,7 +16,7 @@
       </div>
     </div>
     <div class="row">
-      <button class="btn" (click)="exportConfig()" [disabled]="!detail()" title="Download partitions, replication factor and topic config overrides as JSON"><app-icon name="download" /> Export config</button>
+      <button class="btn" (click)="exportJson()" [disabled]="!records().length" title="Download the messages currently shown as JSON"><app-icon name="download" /> Export messages</button>
       <button class="btn" (click)="openProduce()" [disabled]="readOnly()"><app-icon name="send" /> Produce</button>
       <button class="btn danger icon" (click)="askDelete()" [disabled]="readOnly() || detail()?.internal" aria-label="Delete topic" title="Delete topic">
         <app-icon name="trash" />
@@ -37,35 +37,18 @@
     @case ('messages') {
       <section class="card toolbar">
         <form class="row wrap" (ngSubmit)="browse()">
-          <div class="seg" role="group" aria-label="Start position">
-            <button type="button" [attr.aria-pressed]="req().from === 'latest'" [class.on]="req().from === 'latest'" (click)="patch({ from: 'latest' })">Newest</button>
-            <button type="button" [attr.aria-pressed]="req().from === 'earliest'" [class.on]="req().from === 'earliest'" (click)="patch({ from: 'earliest' })">Oldest</button>
-            <button type="button" [attr.aria-pressed]="req().from === 'offset'" [class.on]="req().from === 'offset'" (click)="patch({ from: 'offset' })">Offset</button>
-            <button type="button" [attr.aria-pressed]="req().from === 'timestamp'" [class.on]="req().from === 'timestamp'" (click)="patch({ from: 'timestamp' })">Time</button>
-          </div>
-          @if (req().from === 'offset') {
-            <input class="input mono w-110" type="number" min="0" name="off" aria-label="Start offset" placeholder="offset"
-              [ngModel]="req().offset" (ngModelChange)="patch({ offset: $event })" />
-          }
-          @if (req().from === 'timestamp') {
-            <input class="input w-210" type="datetime-local" step="1" name="ts" aria-label="Start time" [(ngModel)]="timeInput" />
-          }
-          <select class="input w-140" name="part" aria-label="Partition" [ngModel]="req().partition" (ngModelChange)="patch({ partition: +$event })">
-            <option [value]="-1">All partitions</option>
-            @for (p of detail()?.partitions ?? []; track p.id) { <option [value]="p.id">Partition {{ p.id }}</option> }
-          </select>
-          <select class="input w-100" name="limit" aria-label="Limit" [ngModel]="req().limit" (ngModelChange)="patch({ limit: +$event })">
-            @for (n of [50, 100, 500, 1000, 5000]; track n) { <option [value]="n">{{ n }} msgs</option> }
-          </select>
           <div class="search grow">
             <app-icon name="filter" />
             <input class="input" name="filter" placeholder="Filter key, value or headers…" aria-label="Filter messages"
               [ngModel]="req().filter" (ngModelChange)="patch({ filter: $event })" />
           </div>
+          <button type="button" class="btn" [class.on]="moreOpts()" (click)="moreOpts.set(!moreOpts())" [attr.aria-expanded]="moreOpts()" aria-controls="more-opts">
+            More options <app-icon name="chevron" class="chev" />
+          </button>
+          <span class="divider"></span>
           <button class="btn primary" [disabled]="browsing() || live()">
             @if (browsing()) { <span class="spin"></span> } @else { <app-icon name="play" /> } Fetch
           </button>
-          <span class="divider"></span>
           <button type="button" class="btn" [class.live-on]="live()" (click)="toggleLive()" [attr.aria-pressed]="live()">
             @if (live()) { <span class="pulse"></span> Stop live } @else { <app-icon name="zap" /> Live tail }
           </button>
@@ -74,9 +57,30 @@
               <app-icon [name]="livePaused() ? 'play' : 'pause'" />
             </button>
           }
-          <button type="button" class="btn icon" (click)="exportJson()" [disabled]="!records().length" aria-label="Export as JSON" title="Export as JSON">
-            <app-icon name="download" />
-          </button>
+          @if (moreOpts()) {
+            <div class="row wrap more-opts" id="more-opts">
+              <div class="seg" role="group" aria-label="Start position">
+                <button type="button" [attr.aria-pressed]="req().from === 'latest'" [class.on]="req().from === 'latest'" (click)="patch({ from: 'latest' })">Newest</button>
+                <button type="button" [attr.aria-pressed]="req().from === 'earliest'" [class.on]="req().from === 'earliest'" (click)="patch({ from: 'earliest' })">Oldest</button>
+                <button type="button" [attr.aria-pressed]="req().from === 'offset'" [class.on]="req().from === 'offset'" (click)="patch({ from: 'offset' })">Offset</button>
+                <button type="button" [attr.aria-pressed]="req().from === 'timestamp'" [class.on]="req().from === 'timestamp'" (click)="patch({ from: 'timestamp' })">Time</button>
+              </div>
+              @if (req().from === 'offset') {
+                <input class="input mono w-110" type="number" min="0" name="off" aria-label="Start offset" placeholder="offset"
+                  [ngModel]="req().offset" (ngModelChange)="patch({ offset: $event })" />
+              }
+              @if (req().from === 'timestamp') {
+                <app-datetime class="w-210" name="ts" label="Start time" [(ngModel)]="timeInput" />
+              }
+              <select class="input w-140" name="part" aria-label="Partition" [ngModel]="req().partition" (ngModelChange)="patch({ partition: +$event })">
+                <option [value]="-1">All partitions</option>
+                @for (p of detail()?.partitions ?? []; track p.id) { <option [value]="p.id">Partition {{ p.id }}</option> }
+              </select>
+              <select class="input w-100" name="limit" aria-label="Limit" [ngModel]="req().limit" (ngModelChange)="patch({ limit: +$event })">
+                @for (n of [50, 100, 500, 1000, 5000]; track n) { <option [value]="n">{{ n }} msgs</option> }
+              </select>
+            </div>
+          }
         </form>
       </section>
 
@@ -87,8 +91,6 @@
           <span>{{ records().length | num }} shown · {{ m.scanned | num }} scanned · {{ m.ms }} ms</span>
           @if (m.partial) { <span class="badge warn">partial — scan limit reached, narrow the range</span> }
         }
-        <span class="spacer"></span>
-        <span class="hint"><kbd>↑</kbd><kbd>↓</kbd> to move between messages</span>
       </div>
 
       <div class="split">
@@ -208,7 +210,9 @@
     @case ('configs') {
       <section class="card">
         @if (detail(); as d) {
-          <app-config-table [configs]="d.configs" [editable]="!readOnly()" (changed)="setConfig($event)" />
+          <app-config-table [configs]="d.configs" [editable]="!readOnly()" (changed)="setConfig($event)">
+            <button class="btn sm" (click)="exportConfig()" title="Download partitions, replication factor and topic config overrides as JSON"><app-icon name="download" /> Export config</button>
+          </app-config-table>
         }
       </section>
     }

@@ -6,6 +6,9 @@
 
 .toolbar { padding: 10px 12px; }
 .toolbar form { gap: 8px; }
+.more-opts { flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--border); }
+.toolbar .chev { --size: 14px; transition: rotate 0.15s; }
+.toolbar .on .chev { rotate: 180deg; }
 .w-100 { width: 110px; }
 .w-110 { width: 120px; }
 .w-140 { width: 150px; }
@@ -18,12 +21,11 @@
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(248 113 113 / 0.6); } 70% { box-shadow: 0 0 0 8px rgb(248 113 113 / 0); } 100% { box-shadow: 0 0 0 0 rgb(248 113 113 / 0); } }
 
 .status { display: flex; align-items: center; gap: 10px; font-size: 12.5px; min-height: 22px; margin: -4px 2px; }
-.status .hint kbd { margin: 0 1px; }
 
 .split { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(360px, 1fr); gap: 14px; height: calc(100vh - 300px); min-height: 420px; }
 .list, .inspector { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .list .table-wrap { flex: 1; overflow: auto; scroll-padding-top: 36px; }
-.list .table-wrap:focus-visible { outline-offset: -2px; }
+.list .table-wrap:focus-visible { outline: none; } /* the selected row already shows where ↑/↓ act */
 .msgs { table-layout: fixed; }
 .msgs th { padding: 8px 12px; }
 .msgs th:nth-child(1) { width: 64px; }
@@ -52,7 +54,7 @@
 
 /* template highlighting: mirror layer under a transparent input/textarea */
 .tpl-wrap { position: relative; display: grid; min-width: 0; }
-.row > .tpl-wrap, .row > input.input { flex: 1 1 0; min-width: 0; }
+.field > .row > .tpl-wrap, .field > .row > input.input { flex: 1 1 0; min-width: 0; }
 .tpl-wrap.on > :is(input, textarea) { position: relative; background: transparent; color: transparent; caret-color: var(--text); }
 .tpl-hl {
   position: absolute; inset: 0; margin: 0; height: auto; overflow: hidden; pointer-events: none;

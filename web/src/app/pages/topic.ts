@@ -6,13 +6,14 @@ import { BytesPipe, download, highlightJson, NumPipe, prettyJson, TimePipe } fro
 import { Icon } from '../icon';
 import { tplHtml, tplStub } from '../tpl';
 import { ConfigTable } from './config-table';
+import { DateTime } from '../datetime';
 
 type Tab = 'messages' | 'partitions' | 'configs' | 'consumers';
 const LIVE_CAP = 2000;
 
 @Component({
   selector: 'app-topic',
-  imports: [FormsModule, RouterLink, NumPipe, TimePipe, BytesPipe, Icon, ConfigTable],
+  imports: [FormsModule, RouterLink, NumPipe, TimePipe, BytesPipe, Icon, ConfigTable, DateTime],
   templateUrl: './topic.html',
   styleUrl: './topic.css',
 })
@@ -39,7 +40,10 @@ export class TopicPage {
   protected readonly replication = computed(() => this.detail()?.partitions[0]?.replicas.length ?? 0);
 
   // ---- browse ----
-  protected readonly req = signal<BrowseReq>({ from: 'latest', partition: -1, offset: 0, timestamp: 0, limit: 100, filter: '' });
+  private static readonly BROWSE_DEFAULTS: Omit<BrowseReq, 'filter'> = { from: 'latest', partition: -1, offset: 0, timestamp: 0, limit: 1000 };
+  protected readonly req = signal<BrowseReq>({ ...TopicPage.BROWSE_DEFAULTS, filter: '' });
+  /** "More options" criteria apply only while the panel is open; closed = defaults (values are kept for reopening). */
+  protected readonly moreOpts = signal(false);
   protected timeInput = '';
   protected readonly records = signal<KRecord[]>([]);
   protected readonly meta = signal<{ scanned: number; partial: boolean; ms: number } | null>(null);
@@ -93,7 +97,7 @@ export class TopicPage {
 
   async browse() {
     this.stopLive();
-    const r = { ...this.req() };
+    const r = this.moreOpts() ? { ...this.req() } : { ...this.req(), ...TopicPage.BROWSE_DEFAULTS };
     if (r.from === 'timestamp') r.timestamp = this.timeInput ? new Date(this.timeInput).getTime() : Date.now() - 3600_000;
     this.browsing.set(true);
     const t0 = performance.now();

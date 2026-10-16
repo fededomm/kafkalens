@@ -31,6 +31,7 @@ const PATHS: Record<string, string> = {
   inbox: '<path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v6a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19v-6l2.5-8z"/>',
   star: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5z"/>',
   plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0V7zM12 17v5"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
   rewind: '<path d="M11 18 3 12l8-6v12zM21 18l-8-6 8-6v12z"/>',
   filter: '<path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z"/>',
   zap: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>',
