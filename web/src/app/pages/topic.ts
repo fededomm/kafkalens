@@ -182,6 +182,14 @@ export class TopicPage {
     this.toasts.ok(`${what} copied`);
   }
 
+  /** Topic-level overrides plus layout, in the shape the Create topic dialog imports. */
+  exportConfig() {
+    const d = this.detail();
+    if (!d) return;
+    const configs = Object.fromEntries(d.configs.filter((c) => c.source === 'DYNAMIC_TOPIC_CONFIG' && !c.sensitive).map((c) => [c.key, c.value]));
+    download(`${this.topic()}-export.json`, JSON.stringify({ name: d.name, partitions: d.partitions.length, replicationFactor: this.replication(), configs }, null, 2));
+  }
+
   exportJson() {
     download(`${this.topic()}-${Date.now()}.json`, JSON.stringify(this.records(), null, 2));
   }

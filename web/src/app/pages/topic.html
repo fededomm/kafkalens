@@ -16,6 +16,7 @@
       </div>
     </div>
     <div class="row">
+      <button class="btn" (click)="exportConfig()" [disabled]="!detail()" title="Download partitions, replication factor and topic config overrides as JSON"><app-icon name="download" /> Export config</button>
       <button class="btn" (click)="openProduce()" [disabled]="readOnly()"><app-icon name="send" /> Produce</button>
       <button class="btn danger icon" (click)="askDelete()" [disabled]="readOnly() || detail()?.internal" aria-label="Delete topic" title="Delete topic">
         <app-icon name="trash" />

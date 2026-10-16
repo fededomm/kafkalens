@@ -1,4 +1,4 @@
-import { Component, computed, effect, ElementRef, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, computed, effect, ElementRef, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Api, Favorites, Toasts, TopicRow } from '../api';
@@ -106,6 +106,18 @@ const PAGE = 200;
       <button type="button" class="btn ghost icon sm" (click)="createDlg.close()" aria-label="Close"><app-icon name="x" /></button>
     </div>
     <div class="dlg-body form-grid">
+      <div class="field full">
+        <span class="row">Configuration
+          <span class="spacer"></span>
+          <label class="btn ghost sm"><app-icon name="download" /> Import JSON<input type="file" accept=".json,application/json" hidden (change)="importConfig($event)" /></label>
+        </span>
+        @if (configKeys().length) {
+          <span class="hint row">{{ configKeys().length }} imported: <span class="mono">{{ configKeys().join(', ') }}</span>
+            <button type="button" class="btn ghost sm" (click)="nt.configs = {}">Clear</button></span>
+        } @else {
+          <span class="hint">Optional: prefill from a topic's exported config</span>
+        }
+      </div>
       <label class="field full"><span>Name</span>
         <input class="input mono" name="name" required pattern="[a-zA-Z0-9._-]+" [(ngModel)]="nt.name" autofocus placeholder="orders.v1" />
         <span class="hint">Letters, digits, dot, underscore, dash</span>
@@ -114,12 +126,12 @@ const PAGE = 200;
       <label class="field"><span>Replication factor</span><input class="input" type="number" min="1" name="rf" [(ngModel)]="nt.replicationFactor" /></label>
       <label class="field"><span>Cleanup policy</span>
         <select class="input" name="cp" [(ngModel)]="nt.cleanup">
-          <option value="">Default</option><option value="delete">delete</option><option value="compact">compact</option><option value="compact,delete">compact,delete</option>
+          <option value="">{{ nt.configs['cleanup.policy'] ? 'Imported (' + nt.configs['cleanup.policy'] + ')' : 'Default' }}</option><option value="delete">delete</option><option value="compact">compact</option><option value="compact,delete">compact,delete</option>
         </select>
       </label>
       <label class="field"><span>Retention</span>
         <select class="input" name="ret" [(ngModel)]="nt.retention">
-          <option value="">Default</option><option value="3600000">1 hour</option><option value="86400000">1 day</option>
+          <option value="">{{ nt.configs['retention.ms'] ? 'Imported (' + nt.configs['retention.ms'] + ' ms)' : 'Default' }}</option><option value="3600000">1 hour</option><option value="86400000">1 day</option>
           <option value="604800000">7 days</option><option value="2592000000">30 days</option><option value="-1">Forever</option>
         </select>
       </label>
@@ -166,6 +178,7 @@ export class TopicsPage {
   protected readonly fav = inject(Favorites);
   private readonly toasts = inject(Toasts);
   private readonly router = inject(Router);
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly createDlg = viewChild.required<ElementRef<HTMLDialogElement>>('createDlg');
   private readonly deleteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('deleteDlg');
 
@@ -197,7 +210,8 @@ export class TopicsPage {
   protected readonly shown = computed(() => this.visible().slice(0, this.limit()));
   protected readonly PAGE = PAGE;
 
-  protected nt = { name: '', partitions: null as number | null, replicationFactor: null as number | null, cleanup: '', retention: '' };
+  protected nt = this.emptyNt();
+  protected configKeys = () => Object.keys(this.nt.configs);
   protected readonly toDelete = signal<TopicRow | null>(null);
   protected confirmText = '';
 
@@ -227,13 +241,37 @@ export class TopicsPage {
 
   open(t: TopicRow) { this.router.navigate(['/c', this.id(), 'topics', t.name]); }
 
+  private emptyNt() {
+    return { name: '', partitions: null as number | null, replicationFactor: null as number | null, cleanup: '', retention: '', configs: {} as Record<string, string> };
+  }
+
   openCreate() {
-    this.nt = { name: '', partitions: null, replicationFactor: null, cleanup: '', retention: '' };
+    this.nt = this.emptyNt();
     this.createDlg().nativeElement.showModal();
   }
 
+  /** Prefills the dialog from a file written by the topic page's Export config. Name is left as typed. */
+  async importConfig(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const j = JSON.parse(await file.text());
+      if (!j || typeof j !== 'object' || (j.configs != null && typeof j.configs !== 'object')) throw new Error('not a topic export');
+      const configs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(j.configs ?? {})) if (v != null) configs[k] = String(v);
+      const n = (x: unknown) => (Number.isInteger(x) && (x as number) > 0 ? (x as number) : null);
+      this.nt = { ...this.nt, partitions: n(j.partitions), replicationFactor: n(j.replicationFactor), cleanup: '', retention: '', configs };
+      this.cdr.markForCheck(); // zoneless: nt is a plain field set after an await, nothing else re-renders the dialog
+      this.toasts.ok(`Imported ${Object.keys(configs).length} configs from ${file.name}`);
+    } catch (err) {
+      this.toasts.err(`${file.name}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   async create() {
-    const configs: Record<string, string> = {};
+    const configs: Record<string, string> = { ...this.nt.configs };
     if (this.nt.cleanup) configs['cleanup.policy'] = this.nt.cleanup;
     if (this.nt.retention) configs['retention.ms'] = this.nt.retention;
     this.busy.set(true);
