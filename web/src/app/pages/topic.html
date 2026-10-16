@@ -252,10 +252,32 @@
         <label class="field"><span>Send count</span>
           <input class="input" type="number" min="1" max="10000" name="cnt" [(ngModel)]="pr.count" />
         </label>
-        <div class="check-cell"><label class="check"><input type="checkbox" name="kn" [(ngModel)]="pr.keyNull" /> Null key</label></div>
+        <div class="check-cell">
+          <label class="check"><input type="checkbox" name="kn" [(ngModel)]="pr.keyNull" /> Null key</label>
+          <label class="check" title="Render key, value and header values per message"><input type="checkbox" name="tpl" [(ngModel)]="pr.template" (ngModelChange)="checkJson()" /> Template</label>
+        </div>
       </div>
+      @if (pr.template) {
+        <div class="tpl-help">
+          <p class="dim small">Evaluated per message in key, value and header values (Go <code>text/template</code> syntax):</p>
+          <dl>
+            <dt><code>{{ '{{uuid}}' }}</code></dt><dd>random UUID v4</dd>
+            <dt><code>{{ '{{i}}' }}</code></dt><dd>message index, from 0</dd>
+            <dt><code>{{ '{{seq "a" "b"}}' }}</code></dt><dd>values in rotation: a, b, a, …</dd>
+            <dt><code>{{ '{{pick "a" "b"}}' }}</code></dt><dd>random value from the list</dd>
+            <dt><code>{{ '{{randInt 1 100}}' }}</code></dt><dd>random integer, bounds included</dd>
+            <dt><code>{{ '{{now}}' }}</code></dt><dd>current time, RFC 3339</dd>
+            <dt><code>{{ '{{unixMs}}' }}</code></dt><dd>current time, epoch millis</dd>
+          </dl>
+        </div>
+      }
       @if (!pr.keyNull) {
-        <label class="field"><span>Key</span><input #keyInput class="input mono" name="key" [(ngModel)]="pr.key" placeholder="optional" /></label>
+        <label class="field"><span>Key</span>
+          <div class="tpl-wrap" [class.on]="pr.template">
+            @if (pr.template) { <div class="input mono tpl-hl" aria-hidden="true" [innerHTML]="tplHtml(pr.key)"></div> }
+            <input #keyInput class="input mono" name="key" [(ngModel)]="pr.key" placeholder="optional" (scroll)="syncHl($event)" (input)="syncHl($event)" (keyup)="syncHl($event)" (click)="syncHl($event)" />
+          </div>
+        </label>
       }
       <label class="field">
         <span class="row">Value
@@ -264,9 +286,12 @@
             @case ('json') { <span class="badge ok">valid JSON</span> }
             @case ('invalid') { <span class="badge err">invalid JSON</span> }
           }
-          <button type="button" class="btn ghost sm" (click)="formatJson()" [disabled]="valueJsonState() !== 'json'">Format</button>
+          <button type="button" class="btn ghost sm" (click)="formatJson()" [disabled]="valueJsonState() !== 'json' || pr.template">Format</button>
         </span>
-        <textarea #valInput class="input" name="val" placeholder='{"id": 1}  — JSON is validated and can be formatted' rows="12" [(ngModel)]="pr.value" (ngModelChange)="checkJson()" spellcheck="false"></textarea>
+        <div class="tpl-wrap" [class.on]="pr.template">
+          @if (pr.template) { <div class="input mono tpl-hl area" aria-hidden="true" [innerHTML]="tplHtml(pr.value)"></div> }
+          <textarea #valInput class="input" name="val" placeholder='{"id": 1}  — JSON is validated and can be formatted' rows="12" [(ngModel)]="pr.value" (ngModelChange)="checkJson()" (scroll)="syncHl($event)" (input)="syncHl($event)" (keyup)="syncHl($event)" (click)="syncHl($event)" spellcheck="false"></textarea>
+        </div>
       </label>
       <div class="field">
         <span class="row">Headers <span class="spacer"></span>
@@ -275,7 +300,10 @@
         @for (h of pr.headers; track $index; let i = $index) {
           <div class="row">
             <input class="input mono" [name]="'hk' + i" [(ngModel)]="h.key" placeholder="key" aria-label="Header key" />
-            <input class="input mono" [name]="'hv' + i" [(ngModel)]="h.value" placeholder="value" aria-label="Header value" />
+            <div class="tpl-wrap" [class.on]="pr.template">
+              @if (pr.template) { <div class="input mono tpl-hl" aria-hidden="true" [innerHTML]="tplHtml(h.value)"></div> }
+              <input class="input mono" [name]="'hv' + i" [(ngModel)]="h.value" placeholder="value" aria-label="Header value" (scroll)="syncHl($event)" (input)="syncHl($event)" (keyup)="syncHl($event)" (click)="syncHl($event)" />
+            </div>
             <button type="button" class="btn ghost icon sm" (click)="pr.headers.splice(i, 1)" aria-label="Remove header"><app-icon name="x" /></button>
           </div>
         }

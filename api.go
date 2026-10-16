@@ -541,6 +541,7 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		Key       *string  `json:"key"`
 		Value     *string  `json:"value"`
 		Base64    bool     `json:"base64"`
+		Template  bool     `json:"template"` // render key/value/header values per record with text/template
 		Headers   []Header `json:"headers"`
 		Count     int      `json:"count"`
 	}
@@ -548,24 +549,81 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 	if err := decode(r, &req); err != nil {
 		return nil, err
 	}
-	raw := func(s *string) ([]byte, error) {
-		if s == nil {
-			return nil, nil
-		}
-		if req.Base64 {
-			return base64.StdEncoding.DecodeString(*s)
-		}
-		return []byte(*s), nil
-	}
-	key, err := raw(req.Key)
-	if err != nil {
-		return nil, bad("key: %v", err)
-	}
-	val, err := raw(req.Value)
-	if err != nil {
-		return nil, bad("value: %v", err)
-	}
 	req.Count = min(max(req.Count, 1), 10_000)
+	if req.Template && req.Base64 {
+		return nil, bad("template and base64 are mutually exclusive")
+	}
+
+	// each field becomes a per-record renderer; without templating it returns the same bytes every time
+	tm := newMsgTemplates()
+	field := func(name string, s *string) (func() ([]byte, error), error) {
+		if req.Template {
+			f, err := tm.parse(s)
+			if err != nil {
+				return nil, bad("%s: %v", name, err)
+			}
+			return f, nil
+		}
+		var b []byte
+		if s != nil {
+			b = []byte(*s)
+			if req.Base64 {
+				var err error
+				if b, err = base64.StdEncoding.DecodeString(*s); err != nil {
+					return nil, bad("%s: %v", name, err)
+				}
+			}
+		}
+		return func() ([]byte, error) { return b, nil }, nil
+	}
+	key, err := field("key", req.Key)
+	if err != nil {
+		return nil, err
+	}
+	val, err := field("value", req.Value)
+	if err != nil {
+		return nil, err
+	}
+	type hdr struct {
+		key string
+		val func() ([]byte, error)
+	}
+	var hs []hdr
+	for _, h := range req.Headers {
+		if h.Key == "" {
+			continue
+		}
+		v := h.Value
+		var f func() ([]byte, error)
+		if req.Template {
+			if f, err = tm.parse(&v); err != nil {
+				return nil, bad("header %s: %v", h.Key, err)
+			}
+		} else {
+			f = func() ([]byte, error) { return []byte(v), nil }
+		}
+		hs = append(hs, hdr{h.Key, f})
+	}
+
+	recs := make([]*kgo.Record, req.Count)
+	for i := range recs {
+		tm.i = i
+		rec := &kgo.Record{Topic: r.PathValue("topic"), Partition: req.Partition}
+		if rec.Key, err = key(); err != nil {
+			return nil, bad("key: %v", err)
+		}
+		if rec.Value, err = val(); err != nil {
+			return nil, bad("value: %v", err)
+		}
+		for _, h := range hs {
+			b, err := h.val()
+			if err != nil {
+				return nil, bad("header %s: %v", h.key, err)
+			}
+			rec.Headers = append(rec.Headers, kgo.RecordHeader{Key: h.key, Value: b})
+		}
+		recs[i] = rec
+	}
 
 	opts, _ := clientOpts(c.cluster)
 	if req.Partition >= 0 {
@@ -576,16 +634,6 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		return nil, err
 	}
 	defer k.Close()
-	var hs []kgo.RecordHeader
-	for _, h := range req.Headers {
-		if h.Key != "" {
-			hs = append(hs, kgo.RecordHeader{Key: h.Key, Value: []byte(h.Value)})
-		}
-	}
-	recs := make([]*kgo.Record, req.Count)
-	for i := range recs {
-		recs[i] = &kgo.Record{Topic: r.PathValue("topic"), Partition: req.Partition, Key: key, Value: val, Headers: hs}
-	}
 	res := k.ProduceSync(r.Context(), recs...)
 	if err := res.FirstErr(); err != nil {
 		return nil, err

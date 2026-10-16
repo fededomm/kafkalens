@@ -4,6 +4,7 @@ import { Router, RouterLink } from '@angular/router';
 import { Api, BrowseReq, BrowseResp, Favorites, Header, KRecord, Toasts, TopicDetail } from '../api';
 import { BytesPipe, download, highlightJson, NumPipe, prettyJson, TimePipe } from '../fmt';
 import { Icon } from '../icon';
+import { tplHtml, tplStub } from '../tpl';
 import { ConfigTable } from './config-table';
 
 type Tab = 'messages' | 'partitions' | 'configs' | 'consumers';
@@ -56,7 +57,7 @@ export class TopicPage {
   private buffer: KRecord[] = [];
 
   // ---- produce ----
-  protected pr = { key: '', value: '', partition: -1, count: 1, headers: [] as Header[], keyNull: false };
+  protected pr = { key: '', value: '', partition: -1, count: 1, headers: [] as Header[], keyNull: false, template: false };
   protected readonly producing = signal(false);
   protected readonly valueJsonState = signal<'json' | 'text' | 'invalid'>('text');
 
@@ -190,14 +191,26 @@ export class TopicPage {
     this.pr = {
       key: from?.key ?? '', value: from?.value ?? '', partition: -1, count: 1,
       headers: from ? from.headers.map((h) => ({ ...h })) : [], keyNull: from ? from.key == null : false,
+      template: this.pr.template,
     };
     this.checkJson();
     this.produceDlg().nativeElement.showModal();
     afterNextRender(() => (from ? this.valInput() : this.keyInput() ?? this.valInput())?.nativeElement.focus(), { injector: this.injector });
   }
 
+  protected readonly tplHtml = tplHtml;
+
+  /** Keeps the highlight layer (previous sibling) scrolled like its input; rAF so it runs after the mirror re-renders. */
+  syncHl(e: Event) {
+    const el = e.target as HTMLElement;
+    requestAnimationFrame(() => {
+      const hl = el.previousElementSibling;
+      if (hl?.classList.contains('tpl-hl')) { hl.scrollTop = el.scrollTop; hl.scrollLeft = el.scrollLeft; }
+    });
+  }
+
   checkJson() {
-    const v = this.pr.value.trim();
+    const v = (this.pr.template ? tplStub(this.pr.value) : this.pr.value).trim();
     if (!v || (v[0] !== '{' && v[0] !== '[')) return this.valueJsonState.set('text');
     try { JSON.parse(v); this.valueJsonState.set('json'); } catch { this.valueJsonState.set('invalid'); }
   }
@@ -211,7 +224,7 @@ export class TopicPage {
     try {
       const res = await this.api.post<{ count: number; partition: number; offset: number }>(`${this.base()}/produce`, {
         key: this.pr.keyNull ? null : this.pr.key, value: this.pr.value, partition: this.pr.partition,
-        count: this.pr.count, headers: this.pr.headers.filter((h) => h.key),
+        count: this.pr.count, headers: this.pr.headers.filter((h) => h.key), template: this.pr.template,
       });
       this.toasts.ok(res.count > 1 ? `Produced ${res.count} messages` : `Produced to partition ${res.partition} @ offset ${res.offset}`);
       this.produceDlg().nativeElement.close();
