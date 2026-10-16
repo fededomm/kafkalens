@@ -7,7 +7,7 @@
   "frontend:build": "npx ng build",
   "info": {
     "productName": "KafkaLens",
-    "productVersion": "0.2.0",
+    "productVersion": "0.3.0",
     "comments": "Apache Kafka GUI",
     "copyright": "Copyright © KafkaLens contributors. Licensed under Apache 2.0."
   }
