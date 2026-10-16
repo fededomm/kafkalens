@@ -25,7 +25,7 @@ The binaries are not code-signed yet. Windows SmartScreen: *More info → Run an
 - **Overview** — brokers, controller, partition leadership, under-replicated/offline partitions, broker configs
 - **Topics** — search (regex), sort, message counts, health, ★ favorites pinned on top (per cluster, stored in the browser), create (partitions/RF/retention/cleanup), delete with typed confirmation
 - **Messages** — browse newest/oldest/from offset/from time, per partition, server-side filter on key/value/headers, JSON pretty-print + highlighting, headers, copy, export JSON, **live tail** (SSE), re-send a message
-- **Produce** — key/null key, value with JSON validation/format, headers, target partition, N copies
+- **Produce** — key/null key, value with JSON validation/format, headers, target partition, N copies; optional per-message templates (`{{uuid}}`, `{{i}}`, `{{seq "a" "b"}}`, …)
 - **Topic admin** — partitions (leader/replicas/ISR/offsets), add partitions, edit/reset configs, consumers with lag
 - **Consumer groups** — state, members, lag per topic/partition, auto-refresh, reset offsets (earliest/latest/time/offset), delete
 - **Ctrl+K** command palette, dark/light theme, keyboard navigation in the message list
