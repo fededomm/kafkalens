@@ -3,35 +3,61 @@ package main
 import (
 	"embed"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
+
+	"kafkalens/internal/api"
+	"kafkalens/internal/config"
+	"kafkalens/internal/kafka"
+	"kafkalens/internal/store"
 )
 
 //go:embed all:web/dist/web/browser
 var dist embed.FS
 
+// defaultSettings is config.yaml: the browser mode's defaults and the desktop app's settings.
+//
+//go:embed config.yaml
+var defaultSettings []byte
+
+// clustersFile is the clusters file from the settings, or the default location.
+func clustersFile(cfg config.Config) string {
+	if cfg.Clusters != "" {
+		return cfg.Clusters
+	}
+	return defaultConfig()
+}
+
 func defaultConfig() string {
-	home, _ := os.UserConfigDir()
+	home, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("cannot get user config dir: %v", err)
+	}
+
 	return filepath.Join(home, "kafkalens", "clusters.json")
 }
 
 // newHandler serves the API and the embedded UI; shared by the server and desktop builds.
-func newHandler(store *Store) http.Handler {
-	mux := http.NewServeMux()
-	(&API{store: store, pool: NewPool()}).Routes(mux)
+func newHandler(st *store.Store) http.Handler {
+	r := chi.NewRouter()
+	r.Use(harden)
+	r.Mount("/api", api.New(st, kafka.NewPool()))
 
 	ui, _ := fs.Sub(dist, "web/dist/web/browser")
 	files := http.FileServerFS(ui)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		// SPA fallback: unknown non-asset paths serve index.html
-		if _, err := fs.Stat(ui, strings.TrimPrefix(r.URL.Path, "/")); err != nil && !strings.HasPrefix(r.URL.Path, "/api/") {
+		if _, err := fs.Stat(ui, strings.TrimPrefix(r.URL.Path, "/")); err != nil {
 			r.URL.Path = "/"
 		}
 		files.ServeHTTP(w, r)
 	})
-	return harden(mux)
+	return r
 }
 
 // harden adds browser security headers and caps request bodies.

@@ -3,17 +3,20 @@
 All notable changes to KafkaLens are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] - 2026-10-16
 
 ### Added
 
 - **Themed date picker.** The date and time fields (the *Time* start position in Messages and the reset-to-time option for consumer groups) open a calendar that matches the app's light and dark themes, replacing the browser's picker. Dates can still be typed, picking a day keeps the time already entered, and **Now** / **Clear** are one click away.
+- **Startup settings in `config.yaml`.** Listen address, opening the browser, the clusters file and the log level, read with viper. The browser mode reads `./config.yaml` or `-settings <file>`; every key can also be set with a `KAFKALENS_<SECTION>_<KEY>` environment variable (e.g. `KAFKALENS_SERVER_ADDR`); the existing `-addr`, `-config` and `-no-open` flags still work and take precedence. The desktop app embeds the file at build time and also reads the environment. Unknown keys and invalid values are reported at startup.
+- **Logging.** The browser mode logs to the console and the desktop app to `kafkalens.log` next to `clusters.json`; at startup a log over 10 MiB is moved to `kafkalens.log.1`. Failed calls and changes are logged with status, duration and error; `log.level: debug` (or `KAFKALENS_LOG_LEVEL=debug`) logs reads too.
 
 ### Changed
 
 - **Simpler message search bar.** By default it shows only the text filter, **Fetch** and **Live tail**, and reads the newest 1,000 messages (previously 100). Start position (newest, oldest, offset, time), partition and message count are under **More options**. They apply only while the panel is open: closing it goes back to the defaults, and reopening it restores the previous choices.
 - **Export buttons moved.** **Export messages** is now in the topic header, and **Export config** is in the toolbar of the *Configuration* tab.
 - The message list no longer shows the keyboard hint or a focus outline. The ↑/↓ (and j/k) keys still move between messages.
+- **Backend reorganized.** API routes now run on [chi](https://github.com/go-chi/chi), and the Go code is split into `internal/api`, `internal/kafka`, `internal/store` and `internal/config`. The API paths and responses are unchanged, except that unknown `/api` routes and wrong methods now get a JSON error (404 / 405) instead of a plain-text one.
 
 ### Fixed
 
@@ -44,7 +47,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
-[Unreleased]: https://github.com/fededomm/kafkalens/compare/v0.3.1...HEAD
+[0.4.0]: https://github.com/fededomm/kafkalens/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/fededomm/kafkalens/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fededomm/kafkalens/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/fededomm/kafkalens/compare/v0.1.1...v0.2.0

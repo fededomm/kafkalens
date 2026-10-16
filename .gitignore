@@ -38,3 +38,4 @@ __pycache__/
 
 # --- not published (kept from the previous .gitignore) ---
 scripts/
+tmp/*

@@ -31,10 +31,10 @@ flowchart TB
 
     subgraph core["Shared Go core"]
         harden["harden() · main.go<br/>security headers · 16 MiB body cap"]
-        mux["ServeMux<br/>/api routes + SPA fallback"]
-        routes["api.go<br/>handlers · read-only guard<br/>tail: openTail / pumpTail (max 16)"]
-        kafka["kafka.go<br/>clientOpts (TLS · SASL)<br/>Pool (one client per cluster) · Browse"]
-        store["store.go<br/>Store · withSecrets"]
+        mux["chi router · main.go<br/>/api mount + SPA fallback"]
+        routes["internal/api<br/>handlers · withCluster · writable guard"]
+        kafka["internal/kafka<br/>ClientOpts (TLS · SASL)<br/>Pool (one client per cluster) · Browse<br/>tail: OpenTail / PumpTail (max 16)"]
+        store["internal/store<br/>Store · WithSecrets"]
     end
 
     httpsrv --> harden
@@ -42,7 +42,7 @@ flowchart TB
     harden --> mux --> routes
     routes --> kafka
     routes --> store
-    bridge --> routes
+    bridge --> kafka
     bridge --> store
 
     kafka -->|"franz-go kgo / kadm<br/>PLAINTEXT · TLS · SASL PLAIN/SCRAM"| clusters[("Kafka clusters")]
@@ -54,19 +54,21 @@ flowchart TB
 | `web/` | Angular UI. Talks only to `/api/…`; in desktop mode it also uses the Wails bridge for live tail and native save dialogs. Theme and favorite topics live in `localStorage`. |
 | `server.go` | Browser mode: listens on `127.0.0.1:8088` (`-addr`), opens the default browser. Pure Go, no cgo. |
 | `desktop.go` | Desktop mode: serves the same handler through Wails' in-process asset server. Wails buffers whole responses, so live tail goes through Wails events and exports through `SaveFile`. |
-| `main.go` | `newHandler()` wires the API and the embedded UI; `harden()` adds CSP and other security headers and caps request bodies. |
-| `api.go` | REST routes. `withAdmin` resolves the cluster's admin client; `write` blocks mutations on read-only clusters; `openTail`/`pumpTail` stream new records for both modes. |
-| `kafka.go` | franz-go client options (TLS, SASL), a pool with one long-lived client per cluster, and `Browse`, which reads a bounded window of records without joining a consumer group. |
-| `store.go` | Saved connections in `clusters.json`. Secrets are never sent to the UI; `withSecrets` reuses a stored password only when brokers and auth settings are unchanged. |
+| `config.yaml`, `internal/config` | Startup settings (address, open browser, clusters file, log level), read with viper. Layers: embedded `config.yaml` (defaults) → `./config.yaml` or `-settings` (browser mode only, checked on its own before merging) → `KAFKALENS_<SECTION>_<KEY>` env → flags (browser mode only). Unknown keys, wrong types and invalid values stop the start with a clear error. |
+| `logging.go` | `slog` setup: console in browser mode, `kafkalens.log` next to `clusters.json` in desktop mode; level from `log.level` (or `KAFKALENS_LOG_LEVEL`). `internal/api/log.go` logs one line per API call. |
+| `main.go` | `newHandler()` builds the [chi](https://github.com/go-chi/chi) router: mounts the API under `/api` and serves the embedded UI with an SPA fallback; `harden()` adds CSP and other security headers and caps request bodies. |
+| `internal/api` | REST routes (`api.go`), with handlers grouped by area: `clusters.go`, `overview.go`, `topics.go`, `messages.go` (browse, live tail over SSE, produce, `template.go`), `groups.go`. The `withCluster` middleware resolves `{id}` to the cluster and its admin client with a 30 s timeout; `writable` blocks mutations on read-only clusters. Handlers return `(value, error)` and `reply` writes the JSON. |
+| `internal/kafka` | franz-go client options (TLS, SASL), a pool with one long-lived client per cluster, `Browse`, which reads a bounded window of records without joining a consumer group, and `OpenTail`/`PumpTail`, which stream new records for both modes. |
+| `internal/store` | Saved connections in `clusters.json`. Secrets are never sent to the UI; `WithSecrets` reuses a stored password only when brokers and auth settings are unchanged. |
 
 ## Request flow: reading messages
 
 ```mermaid
 sequenceDiagram
     participant UI as Angular UI
-    participant API as api.go
-    participant ST as store.go
-    participant K as kafka.go
+    participant API as internal/api
+    participant ST as internal/store
+    participant K as internal/kafka
     participant KC as Kafka
 
     UI->>API: POST /api/c/{id}/topics/{topic}/browse

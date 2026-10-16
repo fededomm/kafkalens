@@ -1,0 +1,18 @@
+# KafkaLens startup settings.
+#
+# Read with viper, each layer overriding the previous one:
+#   1. this file, embedded in the binaries as the defaults
+#   2. browser mode only: ./config.yaml, or the file given with -settings (keys left out keep the default)
+#   3. environment: KAFKALENS_<SECTION>_<KEY>, e.g. KAFKALENS_LOG_LEVEL=debug, KAFKALENS_SERVER_ADDR
+#   4. browser mode only: the -addr, -config and -no-open flags
+# The desktop app uses the embedded copy: edit this file and rebuild, or use the environment.
+
+server:                  # browser mode only
+  addr: 127.0.0.1:8088   # listen address; keep it on loopback, the API has no authentication
+  openBrowser: true      # open the UI in the default browser at startup
+
+# Saved connections. Empty = <user config dir>/kafkalens/clusters.json.
+clusters: ""
+
+log:
+  level: info            # debug | info | warn | error

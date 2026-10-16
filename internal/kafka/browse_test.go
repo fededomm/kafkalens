@@ -1,4 +1,4 @@
-package main
+package kafka
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+
+	"kafkalens/internal/store"
 )
 
 // Needs a broker on localhost:9092 (`make kafka`); skipped otherwise.
@@ -19,7 +21,7 @@ func TestBrowse(t *testing.T) {
 		c.Close()
 	}
 	ctx := context.Background()
-	cl := Cluster{ID: "t", Brokers: []string{"localhost:9092"}}
+	cl := store.Cluster{ID: "t", Brokers: []string{"localhost:9092"}}
 	k, _ := kgo.NewClient(kgo.SeedBrokers(cl.Brokers...))
 	defer k.Close()
 	adm := kadm.NewClient(k)

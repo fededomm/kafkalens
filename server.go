@@ -5,37 +5,64 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"time"
+
+	"kafkalens/internal/config"
+	"kafkalens/internal/store"
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:8088", "listen address")
-	cfg := flag.String("config", defaultConfig(), "clusters file")
-	noOpen := flag.Bool("no-open", false, "do not open the browser")
+	settings := flag.String("settings", "config.yaml", "startup settings (YAML); if the default file is missing, built-in defaults apply")
+	addr := flag.String("addr", "", "listen address (overrides server.addr)")
+	clusters := flag.String("config", "", "clusters file (overrides clusters)")
+	noOpen := flag.Bool("no-open", false, "do not open the browser (overrides server.openBrowser)")
 	flag.Parse()
 
-	store, err := OpenStore(*cfg)
+	// an explicit -settings file must exist; the default ./config.yaml is optional
+	cfg, source, err := config.Load(defaultSettings, *settings, !flagSet("settings"))
 	if err != nil {
-		log.Fatalf("load %s: %v", *cfg, err)
+		fatal("invalid settings", "file", source, "error", err)
 	}
-	ln, err := net.Listen("tcp", *addr)
+	if *addr != "" {
+		cfg.Server.Addr = *addr
+	}
+	if *clusters != "" {
+		cfg.Clusters = *clusters
+	}
+	if *noOpen {
+		cfg.Server.OpenBrowser = false
+	}
+	setupLogging(os.Stderr, cfg) // browser mode runs from a terminal: log to the console
+	cfgPath := clustersFile(cfg)
+
+	st, err := store.OpenStore(cfgPath)
 	if err != nil {
-		log.Fatal(err)
+		fatal("load clusters", "file", cfgPath, "error", err)
+	}
+	ln, err := net.Listen("tcp", cfg.Server.Addr)
+	if err != nil {
+		fatal("listen", "addr", cfg.Server.Addr, "error", err)
 	}
 	url := "http://" + ln.Addr().String()
-	log.Printf("KafkaLens on %s (clusters: %s)", url, *cfg)
-	if !*noOpen {
+	slog.Info("KafkaLens started", "mode", "browser", "url", url, "settings", source, "clusters", cfgPath)
+	if cfg.Server.OpenBrowser {
 		openBrowser(url)
 	}
 	// no WriteTimeout: live tail is a long-lived SSE stream
-	srv := &http.Server{Handler: newHandler(store), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
-	log.Fatal(srv.Serve(ln))
+	srv := &http.Server{Handler: newHandler(st), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	fatal("server stopped", "error", srv.Serve(ln))
+}
+
+// flagSet reports whether the named flag was given on the command line.
+func flagSet(name string) (set bool) {
+	flag.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
 }
 
 func openBrowser(url string) {

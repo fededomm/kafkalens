@@ -35,10 +35,15 @@ The binaries are not code-signed yet. Windows SmartScreen: *More info → Run an
 ```sh
 make build && ./bin/kafkalens          # opens http://127.0.0.1:8088
 ./bin/kafkalens -addr 0.0.0.0:8088 -no-open -config /path/clusters.json
+./bin/kafkalens -settings /path/config.yaml
 ```
+
+**Settings.** Startup settings live in [`config.yaml`](config.yaml): listen address, whether to open the browser, the clusters file and the log level. They are read with [viper](https://github.com/spf13/viper), each layer overriding the previous one: the built-in defaults (the embedded `config.yaml`), then `./config.yaml` or the file given with `-settings`, then `KAFKALENS_<SECTION>_<KEY>` environment variables (e.g. `KAFKALENS_SERVER_ADDR`, `KAFKALENS_LOG_LEVEL`), then the `-addr`, `-config` and `-no-open` flags. Keys left out keep their default and unknown keys are rejected. The desktop app uses the embedded file plus the environment: edit `config.yaml` and rebuild, or set the variables.
 
 Connections are stored in `~/.config/kafkalens/clusters.json` (mode 0600, passwords and client keys in plain text).
 KafkaLens is a development tool: the API has no authentication, so only bind it to non-loopback addresses on trusted networks.
+
+**Logs.** The browser mode logs to the console. The desktop app writes `kafkalens.log` next to `clusters.json` (`~/.config/kafkalens/` on Linux, `~/Library/Application Support/kafkalens/` on macOS, `%AppData%\kafkalens\` on Windows); past 10 MiB the old file is kept as `kafkalens.log.1` at the next start. Each API call that fails or changes something is logged with its status, duration and error; set `log.level: debug` in `config.yaml` to log reads too (`info` is the default, `warn` and `error` are quieter). `KAFKALENS_LOG_LEVEL` overrides it, which is the way to change the level of an installed desktop app without rebuilding. Request bodies are never logged.
 
 ## Desktop app (Wails)
 

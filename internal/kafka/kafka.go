@@ -1,4 +1,4 @@
-package main
+package kafka
 
 import (
 	"cmp"
@@ -18,9 +18,11 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
+
+	"kafkalens/internal/store"
 )
 
-func clientOpts(c Cluster) ([]kgo.Opt, error) {
+func ClientOpts(c store.Cluster) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(c.Brokers...),
 		kgo.ClientID("kafkalens"),
@@ -66,13 +68,13 @@ type Pool struct {
 
 func NewPool() *Pool { return &Pool{clients: map[string]*kgo.Client{}} }
 
-func (p *Pool) Admin(c Cluster) (*kadm.Client, error) {
+func (p *Pool) Admin(c store.Cluster) (*kadm.Client, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if cl, ok := p.clients[c.ID]; ok {
 		return kadm.NewClient(cl), nil
 	}
-	opts, err := clientOpts(c)
+	opts, err := ClientOpts(c)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func (p *Pool) Admin(c Cluster) (*kadm.Client, error) {
 	return kadm.NewClient(cl), nil
 }
 
-func (p *Pool) Raw(c Cluster) (*kgo.Client, error) {
+func (p *Pool) Raw(c store.Cluster) (*kgo.Client, error) {
 	if _, err := p.Admin(c); err != nil {
 		return nil, err
 	}
@@ -176,7 +178,7 @@ type BrowseResp struct {
 const scanCap = 200_000
 
 // Browse reads a bounded window of records without joining a consumer group.
-func Browse(ctx context.Context, c Cluster, adm *kadm.Client, topic string, req BrowseReq) (BrowseResp, error) {
+func Browse(ctx context.Context, c store.Cluster, adm *kadm.Client, topic string, req BrowseReq) (BrowseResp, error) {
 	if req.Limit <= 0 || req.Limit > 5000 {
 		req.Limit = 500
 	}
@@ -231,7 +233,7 @@ func Browse(ctx context.Context, c Cluster, adm *kadm.Client, topic string, req 
 		return resp, nil
 	}
 
-	opts, _ := clientOpts(c)
+	opts, _ := ClientOpts(c)
 	cl, err := kgo.NewClient(append(opts, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{topic: from}))...)
 	if err != nil {
 		return resp, err

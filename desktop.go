@@ -8,8 +8,10 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"io"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
@@ -17,12 +19,16 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"kafkalens/internal/config"
+	"kafkalens/internal/kafka"
+	"kafkalens/internal/store"
 )
 
 // Desktop is bound to the UI as window.go.main.Desktop.
 type Desktop struct {
 	ctx   context.Context
-	store *Store
+	store *store.Store
 	mu    sync.Mutex
 	tails map[string]context.CancelFunc
 	seq   int
@@ -35,12 +41,13 @@ func (d *Desktop) Tail(id, topic string) (string, error) {
 	if !ok {
 		return "", errors.New("cluster not found")
 	}
-	if !acquireTail() {
+	if !kafka.AcquireTail() {
 		return "", errors.New("too many live tails open")
 	}
-	k, err := openTail(cl, topic)
+	k, err := kafka.OpenTail(cl, topic)
 	if err != nil {
-		releaseTail()
+		kafka.ReleaseTail()
+		slog.Warn("live tail", "cluster", id, "topic", topic, "error", err)
 		return "", err
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
@@ -50,9 +57,9 @@ func (d *Desktop) Tail(id, topic string) (string, error) {
 	d.tails[sid] = cancel
 	d.mu.Unlock()
 	go func() {
-		defer releaseTail()
+		defer kafka.ReleaseTail()
 		defer k.Close()
-		pumpTail(ctx, k, func(batch []Record) error {
+		kafka.PumpTail(ctx, k, func(batch []kafka.Record) error {
 			wr.EventsEmit(d.ctx, "tail:"+sid, batch)
 			return nil
 		})
@@ -79,12 +86,28 @@ func (d *Desktop) SaveFile(name, content string) (string, error) {
 }
 
 func main() {
-	cfg := defaultConfig()
-	store, err := OpenStore(cfg)
+	settings, _, err := config.Load(defaultSettings, "", false) // embedded config.yaml + KAFKALENS_* env
 	if err != nil {
-		log.Fatalf("load %s: %v", cfg, err)
+		fatal("invalid built-in settings", "error", err)
 	}
-	d := &Desktop{store: store, tails: map[string]context.CancelFunc{}}
+	cfg := clustersFile(settings)
+	// installed app, often started without a terminal (no console at all on Windows): log to a file
+	logPath := "stderr"
+	if f, p, err := openLogFile(filepath.Dir(cfg)); err == nil {
+		defer f.Close()
+		setupLogging(io.MultiWriter(f, os.Stderr), settings)
+		logPath = p
+	} else {
+		setupLogging(os.Stderr, settings)
+		slog.Warn("cannot open log file, logging to stderr", "error", err)
+	}
+	slog.Info("KafkaLens started", "mode", "desktop", "clusters", cfg, "log", logPath)
+
+	st, err := store.OpenStore(cfg)
+	if err != nil {
+		fatal("load clusters", "file", cfg, "error", err)
+	}
+	d := &Desktop{store: st, tails: map[string]context.CancelFunc{}}
 	err = wails.Run(&options.App{
 		Title:            "KafkaLens",
 		Width:            1400,
@@ -92,11 +115,11 @@ func main() {
 		MinWidth:         900,
 		MinHeight:        600,
 		BackgroundColour: &options.RGBA{R: 11, G: 14, B: 20, A: 255},
-		AssetServer:      &assetserver.Options{Handler: newHandler(store)},
+		AssetServer:      &assetserver.Options{Handler: newHandler(st)},
 		OnStartup:        func(ctx context.Context) { d.ctx = ctx },
 		Bind:             []any{d},
 	})
 	if err != nil {
-		log.Fatal(err)
+		fatal("desktop window", "error", err)
 	}
 }

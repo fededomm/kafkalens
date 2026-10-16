@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"crypto/rand"
@@ -29,7 +29,7 @@ type Cluster struct {
 }
 
 // public strips the secret before sending a cluster to the browser.
-func (c Cluster) public() map[string]any {
+func (c Cluster) Public() map[string]any {
 	b, _ := json.Marshal(c)
 	var m map[string]any
 	json.Unmarshal(b, &m)
@@ -40,10 +40,10 @@ func (c Cluster) public() map[string]any {
 	return m
 }
 
-// withSecrets fills empty secrets in c from the stored copy. The password is
+// WithSecrets fills empty secrets in c from the stored copy. The password is
 // reused only when it would go to the same brokers the same way, so an edited
 // request can't replay it to another host or downgrade it to PLAIN/plaintext.
-func withSecrets(c, stored Cluster) (Cluster, error) {
+func WithSecrets(c, stored Cluster) (Cluster, error) {
 	if c.TLSKey == "" {
 		c.TLSKey = stored.TLSKey
 	}
@@ -53,11 +53,14 @@ func withSecrets(c, stored Cluster) (Cluster, error) {
 	same := slices.Equal(c.Brokers, stored.Brokers) && c.SASLMechanism == stored.SASLMechanism &&
 		c.SASLUser == stored.SASLUser && c.TLS == stored.TLS && c.TLSSkipVerify == stored.TLSSkipVerify && c.TLSCA == stored.TLSCA
 	if !same {
-		return c, bad("brokers, authentication or TLS changed: re-enter the password")
+		return c, ErrPasswordNeeded
 	}
 	c.SASLPassword = stored.SASLPassword
 	return c, nil
 }
+
+// ErrPasswordNeeded: the edit changed where or how the stored password would be sent.
+var ErrPasswordNeeded = errors.New("brokers, authentication or TLS changed: re-enter the password")
 
 type Store struct {
 	mu       sync.Mutex
@@ -94,7 +97,7 @@ func (s *Store) Get(id string) (Cluster, bool) {
 	return s.clusters[i], true
 }
 
-// Save inserts or replaces c. Callers merge secrets first with withSecrets.
+// Save inserts or replaces c. Callers merge secrets first with WithSecrets.
 func (s *Store) Save(c Cluster) (Cluster, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

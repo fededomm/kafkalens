@@ -1,4 +1,4 @@
-package main
+package store
 
 import "testing"
 
@@ -7,7 +7,7 @@ func TestWithSecrets(t *testing.T) {
 
 	same := stored
 	same.SASLPassword, same.TLSKey, same.Name = "", "", "renamed"
-	if c, err := withSecrets(same, stored); err != nil || c.SASLPassword != "pw" || c.TLSKey != "key" {
+	if c, err := WithSecrets(same, stored); err != nil || c.SASLPassword != "pw" || c.TLSKey != "key" {
 		t.Fatalf("unchanged target must keep secrets: %+v %v", c, err)
 	}
 
@@ -21,14 +21,14 @@ func TestWithSecrets(t *testing.T) {
 	} {
 		c := same
 		mut(&c)
-		if _, err := withSecrets(c, stored); err == nil {
+		if _, err := WithSecrets(c, stored); err == nil {
 			t.Errorf("%s changed: stored password must not be reused", name)
 		}
 	}
 
 	typed := same
 	typed.Brokers, typed.SASLPassword = []string{"new:9093"}, "new"
-	if c, err := withSecrets(typed, stored); err != nil || c.SASLPassword != "new" {
+	if c, err := WithSecrets(typed, stored); err != nil || c.SASLPassword != "new" {
 		t.Fatalf("explicit password must win: %+v %v", c, err)
 	}
 }
