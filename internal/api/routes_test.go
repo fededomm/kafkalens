@@ -20,7 +20,7 @@ func TestRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := New(st, kafka.NewPool())
+	h := New(st, kafka.NewPool(), "1.2.3")
 	call := func(method, path string) (int, string) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader("{}")))
@@ -46,6 +46,9 @@ func TestRoutes(t *testing.T) {
 
 	if code, body := call("GET", "/clusters"); code != http.StatusOK || !strings.Contains(body, `"prod"`) {
 		t.Errorf("list clusters: %d %s", code, body)
+	}
+	if code, body := call("GET", "/version"); code != http.StatusOK || !strings.Contains(body, `"version":"1.2.3"`) {
+		t.Errorf("version: %d %s", code, body)
 	}
 	if code, body := call("GET", "/nope"); code != http.StatusNotFound || !strings.Contains(body, `"error"`) {
 		t.Errorf("unknown route: %d %s", code, body)

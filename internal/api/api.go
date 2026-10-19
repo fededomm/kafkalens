@@ -20,8 +20,8 @@ type API struct {
 	pool  *kafka.Pool
 }
 
-// New returns the REST API router, meant to be mounted under /api.
-func New(st *store.Store, pool *kafka.Pool) http.Handler {
+// New returns the REST API router, meant to be mounted under /api; version is shown in the UI.
+func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 	a := &API{store: st, pool: pool}
 	r := chi.NewRouter()
 	r.Use(logRequests)
@@ -29,6 +29,8 @@ func New(st *store.Store, pool *kafka.Pool) http.Handler {
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
 		reply(w, nil, httpErr{http.StatusMethodNotAllowed, "method not allowed"})
 	})
+
+	r.Get("/version", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]string{"version": version}, nil) })
 
 	r.Route("/clusters", func(r chi.Router) {
 		r.Get("/", a.listClusters)

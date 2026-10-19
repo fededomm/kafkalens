@@ -101,7 +101,7 @@ func main() {
 		setupLogging(os.Stderr, settings)
 		slog.Warn("cannot open log file, logging to stderr", "error", err)
 	}
-	slog.Info("KafkaLens started", "mode", "desktop", "clusters", cfg, "log", logPath)
+	slog.Info("KafkaLens started", "version", version(), "mode", "desktop", "clusters", cfg, "log", logPath)
 
 	st, err := store.OpenStore(cfg)
 	if err != nil {

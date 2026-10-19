@@ -1,7 +1,9 @@
 package main
 
 import (
+	"cmp"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
@@ -19,6 +21,20 @@ import (
 
 //go:embed all:web/dist/web/browser
 var dist embed.FS
+
+//go:embed wails.json
+var wailsJSON []byte
+
+// version is info.productVersion from wails.json: the one place a release bumps it.
+func version() string {
+	var w struct {
+		Info struct {
+			ProductVersion string `json:"productVersion"`
+		} `json:"info"`
+	}
+	json.Unmarshal(wailsJSON, &w)
+	return cmp.Or(w.Info.ProductVersion, "dev")
+}
 
 // defaultSettings is config.yaml: the browser mode's defaults and the desktop app's settings.
 //
@@ -46,7 +62,7 @@ func defaultConfig() string {
 func newHandler(st *store.Store) http.Handler {
 	r := chi.NewRouter()
 	r.Use(harden)
-	r.Mount("/api", api.New(st, kafka.NewPool()))
+	r.Mount("/api", api.New(st, kafka.NewPool(), version()))
 
 	ui, _ := fs.Sub(dist, "web/dist/web/browser")
 	files := http.FileServerFS(ui)

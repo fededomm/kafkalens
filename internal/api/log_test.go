@@ -20,7 +20,7 @@ func TestRequestLog(t *testing.T) {
 	defer slog.SetDefault(prev)
 
 	st, _ := store.OpenStore(filepath.Join(t.TempDir(), "clusters.json"))
-	h := New(st, kafka.NewPool())
+	h := New(st, kafka.NewPool(), "1.2.3")
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/c/nope/topics", nil))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/clusters", nil))
 

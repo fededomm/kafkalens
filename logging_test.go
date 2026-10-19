@@ -23,3 +23,9 @@ func TestOpenLogFileRotates(t *testing.T) {
 		t.Errorf("fresh log: %q", b)
 	}
 }
+
+func TestVersionFromWailsJSON(t *testing.T) {
+	if v := version(); v == "dev" || v == "" {
+		t.Errorf("productVersion not read from wails.json: %q", v)
+	}
+}

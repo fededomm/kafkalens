@@ -51,6 +51,7 @@
         <app-icon [name]="theme() === 'dark' ? 'sun' : 'moon'" />
       </button>
     </div>
+    @if (version()) { <div class="version">KafkaLens v{{ version() }}</div> }
   </aside>
 
   <main class="main">

@@ -26,6 +26,7 @@ export class App {
   protected readonly clusterId = computed(() => /^\/c\/([^/]+)/.exec(this.url())?.[1] ?? null);
   protected readonly cluster = computed(() => this.api.clusters().find((c) => c.id === this.clusterId()) ?? null);
 
+  protected readonly version = signal(''); // from wails.json via /api/version
   protected readonly theme = signal<'dark' | 'light'>((localStorage.getItem('theme') as 'dark' | 'light') ?? 'dark');
   protected readonly switcherOpen = signal(false);
 
@@ -45,6 +46,7 @@ export class App {
 
   constructor() {
     this.api.refreshClusters().catch((e) => this.toasts.err(e));
+    this.api.get<{ version: string }>('/version').then((r) => this.version.set(r.version), () => {});
     effect(() => {
       document.documentElement.dataset['theme'] = this.theme();
       localStorage.setItem('theme', this.theme());

@@ -50,7 +50,7 @@ func main() {
 		fatal("listen", "addr", cfg.Server.Addr, "error", err)
 	}
 	url := "http://" + ln.Addr().String()
-	slog.Info("KafkaLens started", "mode", "browser", "url", url, "settings", source, "clusters", cfgPath)
+	slog.Info("KafkaLens started", "version", version(), "mode", "browser", "url", url, "settings", source, "clusters", cfgPath)
 	if cfg.Server.OpenBrowser {
 		openBrowser(url)
 	}
