@@ -6,48 +6,10 @@ The build tag `desktop` picks the entry point; everything else is shared.
 
 ## Runtime components
 
-```mermaid
-flowchart TB
-    subgraph UI["Angular UI (web/, embedded with go:embed)"]
-        pages["Pages<br/>clusters · overview · topics · topic · groups"]
-        apisvc["Api service (api.ts)<br/>fetch /api/…"]
-        ls[("localStorage<br/>theme · favorites")]
-        pages --> apisvc
-        pages --> ls
-    end
-
-    subgraph browser["Browser mode (server.go)"]
-        httpsrv["http.Server<br/>127.0.0.1:8088"]
-    end
-
-    subgraph desktop["Desktop mode (desktop.go, Wails)"]
-        assets["Wails AssetServer<br/>in-process, no TCP port"]
-        bridge["Desktop bindings<br/>Tail · StopTail · SaveFile"]
-    end
-
-    apisvc -->|"HTTP · live tail over SSE"| httpsrv
-    apisvc -->|"in-process HTTP"| assets
-    apisvc -.->|"window.go calls · Wails events"| bridge
-
-    subgraph core["Shared Go core"]
-        harden["harden() · main.go<br/>security headers · 16 MiB body cap"]
-        mux["chi router · main.go<br/>/api mount + SPA fallback"]
-        routes["internal/api<br/>handlers · withCluster · writable guard"]
-        kafka["internal/kafka<br/>ClientOpts (TLS · SASL)<br/>Pool (one client per cluster) · Browse<br/>tail: OpenTail / PumpTail (max 16)"]
-        store["internal/store<br/>Store · WithSecrets"]
-    end
-
-    httpsrv --> harden
-    assets --> harden
-    harden --> mux --> routes
-    routes --> kafka
-    routes --> store
-    bridge --> kafka
-    bridge --> store
-
-    kafka -->|"franz-go kgo / kadm<br/>PLAINTEXT · TLS · SASL PLAIN/SCRAM"| clusters[("Kafka clusters")]
-    store -->|"0600 file · atomic write"| file[("clusters.json<br/>user config dir")]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/runtime-dark.svg">
+  <img src="diagrams/runtime-light.svg" alt="KafkaLens runtime components: the Angular UI reaches one shared Go core (chi router, internal/api, internal/kafka, internal/store) through http.Server in browser mode or the Wails window in desktop mode; internal/kafka talks to the Kafka clusters and internal/store keeps clusters.json. In desktop mode, live tail goes from the Wails bindings straight to internal/kafka as Wails events.">
+</picture>
 
 | Piece | Role |
 |---|---|
@@ -63,42 +25,14 @@ flowchart TB
 
 ## Request flow: reading messages
 
-```mermaid
-sequenceDiagram
-    participant UI as Angular UI
-    participant API as internal/api
-    participant ST as internal/store
-    participant K as internal/kafka
-    participant KC as Kafka
-
-    UI->>API: POST /api/c/{id}/topics/{topic}/browse
-    API->>ST: Get(id)
-    ST-->>API: Cluster (with secrets)
-    API->>K: Pool.Admin(cluster)
-    API->>K: Browse(topic, from, limit, filter)
-    K->>KC: ListStartOffsets / ListEndOffsets
-    K->>KC: fetch from computed offsets (no consumer group)
-    KC-->>K: records
-    K-->>API: records · scanned · partial
-    API-->>UI: JSON
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/browse-dark.svg">
+  <img src="diagrams/browse-light.svg" alt="Reading messages: the UI posts to internal/api, which loads the cluster from internal/store, gets the admin client and calls Browse in internal/kafka; Browse lists offsets and fetches records from Kafka without a consumer group, and the API returns them as JSON.">
+</picture>
 
 ## Build and release
 
-```mermaid
-flowchart LR
-    src["Go sources + web/"] --> ng["ng build<br/>web/dist"]
-    ng --> gobuild["go build<br/>make build"] --> bin["bin/kafkalens<br/>browser mode"]
-    ng --> wails["wails build (tag desktop)<br/>make desktop · desktop-windows · desktop-macos"]
-    wails --> lin["Linux binary"]
-    wails --> win["kafkalens.exe"]
-    wails --> mac["KafkaLens.app + .dmg"]
-
-    subgraph gha["GitHub Actions"]
-        ci["ci.yml · every PR / push to main<br/>UI build · gofmt · vet · test · govulncheck"]
-        rel["desktop.yml · tag v*<br/>Linux · Windows · macOS runners"]
-        pub["release job<br/>SHA256SUMS · notes from CHANGELOG.md"]
-        rel --> pub
-    end
-    pub --> ghr[("GitHub Release")]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/build-dark.svg">
+  <img src="diagrams/build-light.svg" alt="Build and release: ng build produces web/dist, embedded by go build (browser binary) and wails build (desktop apps); ci.yml checks every push and pull request, and a v* tag runs desktop.yml on three operating systems, whose release job publishes a GitHub Release.">
+</picture>
