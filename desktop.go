@@ -8,13 +8,12 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
 
+	"github.com/rs/zerolog/log"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -47,7 +46,7 @@ func (d *Desktop) Tail(id, topic string) (string, error) {
 	k, err := kafka.OpenTail(cl, topic)
 	if err != nil {
 		kafka.ReleaseTail()
-		slog.Warn("live tail", "cluster", id, "topic", topic, "error", err)
+		log.Warn().Str("cluster", id).Str("topic", topic).Err(err).Msg("live tail")
 		return "", err
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
@@ -95,13 +94,13 @@ func main() {
 	logPath := "stderr"
 	if f, p, err := openLogFile(filepath.Dir(cfg)); err == nil {
 		defer f.Close()
-		setupLogging(io.MultiWriter(f, os.Stderr), settings)
+		setupLogging(settings, f) // file + stderr
 		logPath = p
 	} else {
-		setupLogging(os.Stderr, settings)
-		slog.Warn("cannot open log file, logging to stderr", "error", err)
+		setupLogging(settings, nil)
+		log.Warn().Err(err).Msg("cannot open log file, logging to stderr")
 	}
-	slog.Info("KafkaLens started", "version", version(), "mode", "desktop", "clusters", cfg, "log", logPath)
+	log.Info().Str("version", version()).Str("mode", "desktop").Str("clusters", cfg).Str("log", logPath).Msg("KafkaLens started")
 
 	st, err := store.OpenStore(cfg)
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,7 +51,7 @@ func clustersFile(cfg config.Config) string {
 func defaultConfig() string {
 	home, err := os.UserConfigDir()
 	if err != nil {
-		log.Fatalf("cannot get user config dir: %v", err)
+		fatal("cannot find the user config dir", "error", err)
 	}
 
 	return filepath.Join(home, "kafkalens", "clusters.json")

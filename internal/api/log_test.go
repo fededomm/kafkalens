@@ -2,12 +2,14 @@ package api
 
 import (
 	"bytes"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"kafkalens/internal/kafka"
 	"kafkalens/internal/store"
@@ -15,9 +17,9 @@ import (
 
 func TestRequestLog(t *testing.T) {
 	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	defer slog.SetDefault(prev)
+	prev := log.Logger
+	log.Logger = zerolog.New(&buf).Level(zerolog.InfoLevel)
+	defer func() { log.Logger = prev }()
 
 	st, _ := store.OpenStore(filepath.Join(t.TempDir(), "clusters.json"))
 	h := New(st, kafka.NewPool(), "1.2.3")
@@ -25,10 +27,11 @@ func TestRequestLog(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/clusters", nil))
 
 	out := buf.String()
-	if !strings.Contains(out, "level=WARN") || !strings.Contains(out, "path=/c/nope/topics") || !strings.Contains(out, `error="cluster not found"`) {
-		t.Errorf("failed call not logged with its error:\n%s", out)
+	if want := `{"level":"warn","status":404,`; !strings.Contains(out, want) ||
+		!strings.Contains(out, `"error":"cluster not found","message":"GET /c/nope/topics"`) {
+		t.Errorf("failed call not logged as %s… with its error:\n%s", want, out)
 	}
-	if strings.Contains(out, "path=/clusters") {
+	if strings.Contains(out, "/clusters\"") {
 		t.Errorf("successful GET should only log at debug:\n%s", out)
 	}
 

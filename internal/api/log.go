@@ -1,9 +1,11 @@
 package api
 
 import (
-	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // statusWriter records the status and, via reply, the error of a response.
@@ -38,19 +40,17 @@ func logRequests(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
 
-		lvl := slog.LevelInfo
+		lvl := zerolog.InfoLevel
 		switch {
 		case sw.status >= 500:
-			lvl = slog.LevelError
+			lvl = zerolog.ErrorLevel
 		case sw.status >= 400:
-			lvl = slog.LevelWarn
+			lvl = zerolog.WarnLevel
 		case r.Method == http.MethodGet:
-			lvl = slog.LevelDebug
+			lvl = zerolog.DebugLevel
 		}
-		attrs := []any{"method", r.Method, "path", r.URL.Path, "status", sw.status, "ms", time.Since(start).Milliseconds()}
-		if sw.err != nil {
-			attrs = append(attrs, "error", sw.err.Error())
-		}
-		slog.Log(r.Context(), lvl, "api", attrs...)
+		// reads as: 18:05:01.375 WRN DELETE /api/c/ro/topics/x error="cluster is read-only" ms=0 status=403
+		log.WithLevel(lvl).Int("status", sw.status).Int64("ms", time.Since(start).Milliseconds()).
+			Err(sw.err).Msg(r.Method + " " + r.URL.Path)
 	})
 }

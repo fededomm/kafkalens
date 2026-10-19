@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
 
@@ -75,11 +75,11 @@ func Load(defaults []byte, file string, optional bool) (c Config, source string,
 	return c, source, nil
 }
 
-// LogLevel is log.level as a slog level.
-func (c Config) LogLevel() (slog.Level, error) {
-	var l slog.Level
-	if err := l.UnmarshalText([]byte(c.Log.Level)); err != nil {
-		return l, fmt.Errorf("log.level %q: want debug, info, warn or error", c.Log.Level)
+// LogLevel is log.level as a zerolog level; only the four documented names are accepted, in any case.
+func (c Config) LogLevel() (zerolog.Level, error) {
+	switch l := strings.ToLower(c.Log.Level); l {
+	case "debug", "info", "warn", "error":
+		return zerolog.ParseLevel(l)
 	}
-	return l, nil
+	return zerolog.NoLevel, fmt.Errorf("log.level %q: want debug, info, warn or error", c.Log.Level)
 }

@@ -5,13 +5,14 @@ package main
 
 import (
 	"flag"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"kafkalens/internal/config"
 	"kafkalens/internal/store"
@@ -38,7 +39,7 @@ func main() {
 	if *noOpen {
 		cfg.Server.OpenBrowser = false
 	}
-	setupLogging(os.Stderr, cfg) // browser mode runs from a terminal: log to the console
+	setupLogging(cfg, nil) // browser mode runs from a terminal: log to the console only
 	cfgPath := clustersFile(cfg)
 
 	st, err := store.OpenStore(cfgPath)
@@ -50,7 +51,7 @@ func main() {
 		fatal("listen", "addr", cfg.Server.Addr, "error", err)
 	}
 	url := "http://" + ln.Addr().String()
-	slog.Info("KafkaLens started", "version", version(), "mode", "browser", "url", url, "settings", source, "clusters", cfgPath)
+	log.Info().Str("version", version()).Str("mode", "browser").Str("url", url).Str("settings", source).Str("clusters", cfgPath).Msg("KafkaLens started")
 	if cfg.Server.OpenBrowser {
 		openBrowser(url)
 	}

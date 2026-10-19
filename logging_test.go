@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bytes"
+	stdlog "log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func TestOpenLogFileRotates(t *testing.T) {
@@ -27,5 +33,16 @@ func TestOpenLogFileRotates(t *testing.T) {
 func TestVersionFromWailsJSON(t *testing.T) {
 	if v := version(); v == "dev" || v == "" {
 		t.Errorf("productVersion not read from wails.json: %q", v)
+	}
+}
+
+func TestStdlogRoutedAsWarning(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Logger
+	log.Logger = zerolog.New(&buf)
+	defer func() { log.Logger = prev }()
+	stdlog.New(stdlogWriter{}, "", 0).Print("http: TLS handshake error\n")
+	if got := buf.String(); !strings.Contains(got, `"level":"warn","source":"log","message":"http: TLS handshake error"`) {
+		t.Errorf("got %s", got)
 	}
 }

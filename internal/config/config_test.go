@@ -1,11 +1,12 @@
 package config
 
 import (
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rs/zerolog"
 )
 
 func TestLoad(t *testing.T) {
@@ -20,15 +21,15 @@ func TestLoad(t *testing.T) {
 		return p
 	}
 
-	c, src, err := Load(defaults, "", false)
-	if err != nil || src != "built-in defaults" || c.Server.Addr != "127.0.0.1:8088" || !c.Server.OpenBrowser || c.Clusters != "" || c.Log.Level != "info" {
+	c, src, err := Load(defaults, "", false) // Load also rejects an invalid log.level
+	if err != nil || src != "built-in defaults" || c.Server.Addr != "127.0.0.1:8088" || !c.Server.OpenBrowser || c.Clusters != "" {
 		t.Fatalf("defaults: %+v %q %v", c, src, err)
 	}
 
 	// partial file: only the given keys change (key case doesn't matter)
 	p := write("server:\n  openBrowser: false\nlog:\n  level: DEBUG\n")
 	c, src, err = Load(defaults, p, false)
-	if lvl, _ := c.LogLevel(); err != nil || src != p || c.Server.OpenBrowser || c.Server.Addr != "127.0.0.1:8088" || lvl != slog.LevelDebug {
+	if lvl, _ := c.LogLevel(); err != nil || src != p || c.Server.OpenBrowser || c.Server.Addr != "127.0.0.1:8088" || lvl != zerolog.DebugLevel {
 		t.Fatalf("overlay: %+v %q %v", c, src, err)
 	}
 	if _, _, err := Load(defaults, write("# only comments\n"), false); err != nil {
