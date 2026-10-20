@@ -19,12 +19,14 @@ type topicRow struct {
 
 func (a *API) listTopics(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
 	ctx := r.Context()
-	ts, err := c.adm.ListTopicsWithInternal(ctx)
+	// Bypass the client's metadata cache: Lag (topic detail, groups) caches topics of other
+	// groups we may not be authorized on, and a cached TOPIC_AUTHORIZATION_FAILED fails the whole list.
+	ts, err := c.adm.ListTopicsWithInternal(kadm.WithAuthorizedOps(ctx))
 	if err != nil {
 		return nil, err
 	}
-	starts, _ := c.adm.ListStartOffsets(ctx)
-	ends, _ := c.adm.ListEndOffsets(ctx)
+	starts, _ := c.adm.ListStartOffsets(ctx, ts.Names()...)
+	ends, _ := c.adm.ListEndOffsets(ctx, ts.Names()...)
 	out := []topicRow{}
 	for _, t := range ts.Sorted() {
 		row := topicRow{Name: t.Topic, Partitions: len(t.Partitions), ReplicationFactor: t.Partitions.NumReplicas(), Internal: t.IsInternal}

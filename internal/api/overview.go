@@ -10,7 +10,7 @@ import (
 )
 
 func (a *API) overview(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
-	m, err := c.adm.Metadata(r.Context())
+	m, err := c.adm.Metadata(kadm.WithAuthorizedOps(r.Context())) // uncached, see listTopics
 	if err != nil {
 		return nil, err
 	}

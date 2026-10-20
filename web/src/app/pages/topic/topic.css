@@ -1,0 +1,5 @@
+.topic-page { gap: 16px; }
+.title { display: grid; gap: 6px; min-width: 0; }
+.title h1 { font-size: 20px; word-break: break-all; }
+.crumbs { display: flex; align-items: center; gap: 4px; font-size: 12.5px; }
+.facts { margin-top: 2px; }

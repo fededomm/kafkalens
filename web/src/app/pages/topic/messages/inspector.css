@@ -1,0 +1,9 @@
+.insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.insp-body { padding: 14px; overflow: auto; display: grid; gap: 16px; align-content: start; }
+.kv { display: flex; justify-content: space-between; font-size: 12.5px; }
+.block { display: grid; gap: 6px; }
+.block-head { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
+.block-head .count { font-size: 11px; color: var(--text-3); background: var(--surface-2); border-radius: 999px; padding: 0 7px; text-transform: none; letter-spacing: 0; }
+.block pre.code { max-height: 46vh; }
+.hdrs td { padding: 6px 10px; font-size: 12px; }
+.small { font-size: 12.5px; }

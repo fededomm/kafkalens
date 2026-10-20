@@ -1,0 +1,74 @@
+<div class="page topic-page">
+  <header class="page-head">
+    <div class="title">
+      <nav class="crumbs dim"><a [routerLink]="['/c', id(), 'topics']">Topics</a> <app-icon name="chevron-right" /></nav>
+      <div class="row">
+        <h1 class="mono">{{ topic() }}</h1>
+        <button class="btn ghost icon sm star" [class.on]="fav.has(id(), topic())" (click)="fav.toggle(id(), topic())"
+          [attr.aria-pressed]="fav.has(id(), topic())" [title]="fav.has(id(), topic()) ? 'Remove from favorites' : 'Add to favorites'"
+          aria-label="Favorite topic"><app-icon name="star" /></button>
+      </div>
+      <div class="row wrap facts">
+        <span class="badge">{{ detail()?.partitions?.length ?? '…' }} partitions</span>
+        <span class="badge">RF {{ replication() || '…' }}</span>
+        <span class="badge" [title]="totalMessages() | num">{{ totalMessages() | num: 'compact' }} messages</span>
+        @if (detail()?.internal) { <span class="badge info">internal</span> }
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" (click)="messages()?.exportJson()" [disabled]="!messages()?.records()?.length" title="Download the messages currently shown as JSON"><app-icon name="download" /> Export messages</button>
+      <button class="btn" (click)="produce.open()" [disabled]="readOnly()"><app-icon name="send" /> Produce</button>
+      <button class="btn danger icon" (click)="askDelete()" [disabled]="readOnly() || detail()?.internal" aria-label="Delete topic" title="Delete topic">
+        <app-icon name="trash" />
+      </button>
+    </div>
+  </header>
+
+  @if (error(); as e) { <div class="alert err"><app-icon name="alert" /> {{ e }}</div> }
+
+  <div class="tabs" role="tablist">
+    <button role="tab" [attr.aria-selected]="tab() === 'messages'" [class.on]="tab() === 'messages'" (click)="tab.set('messages')">Messages</button>
+    <button role="tab" [attr.aria-selected]="tab() === 'partitions'" [class.on]="tab() === 'partitions'" (click)="tab.set('partitions')">Partitions <span class="count">{{ detail()?.partitions?.length ?? 0 }}</span></button>
+    <button role="tab" [attr.aria-selected]="tab() === 'configs'" [class.on]="tab() === 'configs'" (click)="tab.set('configs')">Configuration</button>
+    <button role="tab" [attr.aria-selected]="tab() === 'consumers'" [class.on]="tab() === 'consumers'" (click)="tab.set('consumers')">Consumers <span class="count">{{ detail()?.groups?.length ?? 0 }}</span></button>
+  </div>
+
+  <app-topic-messages [hidden]="tab() !== 'messages'" [id]="id()" [topic]="topic()" [base]="base()" [partitions]="detail()?.partitions ?? []"
+    [readOnly]="readOnly()" (resend)="produce.open($event)" />
+
+  @switch (tab()) {
+    @case ('partitions') {
+      <app-topic-partitions [partitions]="detail()?.partitions ?? []" [total]="totalMessages()" [readOnly]="readOnly()" [base]="base()" (changed)="loadDetail()" />
+    }
+    @case ('configs') {
+      <section class="card">
+        @if (detail(); as d) {
+          <app-config-table [configs]="d.configs" [editable]="!readOnly()" (changed)="setConfig($event)">
+            <button class="btn sm" (click)="exportConfig()" title="Download partitions, replication factor and topic config overrides as JSON"><app-icon name="download" /> Export config</button>
+          </app-config-table>
+        }
+      </section>
+    }
+
+    @case ('consumers') {
+      <app-topic-consumers [id]="id()" [groups]="detail()?.groups ?? []" />
+    }
+  }
+</div>
+
+<app-produce-dialog #produce [topic]="topic()" [base]="base()" [partitions]="detail()?.partitions ?? []" (produced)="onProduced()" />
+
+<dialog #deleteDlg class="dlg">
+  <form (ngSubmit)="deleteTopic()">
+    <div class="dlg-head"><div><h2>Delete topic</h2><p>This permanently deletes <b class="mono">{{ topic() }}</b> and all of its messages.</p></div></div>
+    <div class="dlg-body">
+      <label class="field"><span>Type the topic name to confirm</span>
+        <input class="input mono" name="confirm" [(ngModel)]="confirmText" autocomplete="off" />
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" (click)="deleteDlg.close()">Cancel</button>
+      <button class="btn danger solid" [disabled]="confirmText !== topic()">Delete topic</button>
+    </div>
+  </form>
+</dialog>

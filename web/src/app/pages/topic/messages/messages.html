@@ -1,0 +1,88 @@
+<section class="card toolbar">
+  <form class="row wrap" (ngSubmit)="browse()">
+    <div class="search grow">
+      <app-icon name="filter" />
+      <input class="input" name="filter" placeholder="Filter key, value or headers…" aria-label="Filter messages"
+        [ngModel]="req().filter" (ngModelChange)="onFilter($event)" />
+    </div>
+    <button type="button" class="btn" [class.on]="moreOpts()" (click)="moreOpts.set(!moreOpts())" [attr.aria-expanded]="moreOpts()" aria-controls="more-opts">
+      More options <app-icon name="chevron" class="chev" />
+    </button>
+    <span class="divider"></span>
+    <button class="btn primary" [disabled]="browsing() || live()">
+      @if (browsing()) { <span class="spin"></span> } @else { <app-icon name="play" /> } Fetch
+    </button>
+    <button type="button" class="btn" [class.live-on]="live()" (click)="toggleLive()" [attr.aria-pressed]="live()">
+      @if (live()) { <span class="pulse"></span> Stop live } @else { <app-icon name="zap" /> Live tail }
+    </button>
+    @if (live()) {
+      <button type="button" class="btn icon" (click)="togglePause()" [attr.aria-label]="livePaused() ? 'Resume' : 'Pause'">
+        <app-icon [name]="livePaused() ? 'play' : 'pause'" />
+      </button>
+    }
+    @if (moreOpts()) {
+      <div class="row wrap more-opts" id="more-opts">
+        <div class="seg" role="group" aria-label="Start position">
+          <button type="button" [attr.aria-pressed]="req().from === 'latest'" [class.on]="req().from === 'latest'" (click)="patch({ from: 'latest' })">Newest</button>
+          <button type="button" [attr.aria-pressed]="req().from === 'earliest'" [class.on]="req().from === 'earliest'" (click)="patch({ from: 'earliest' })">Oldest</button>
+          <button type="button" [attr.aria-pressed]="req().from === 'offset'" [class.on]="req().from === 'offset'" (click)="patch({ from: 'offset' })">Offset</button>
+          <button type="button" [attr.aria-pressed]="req().from === 'timestamp'" [class.on]="req().from === 'timestamp'" (click)="patch({ from: 'timestamp' })">Time</button>
+        </div>
+        @if (req().from === 'offset') {
+          <input class="input mono w-110" type="number" min="0" name="off" aria-label="Start offset" placeholder="offset"
+            [ngModel]="req().offset" (ngModelChange)="patch({ offset: $event })" />
+        }
+        @if (req().from === 'timestamp') {
+          <app-datetime class="w-210" name="ts" label="Start time" [(ngModel)]="timeInput" />
+        }
+        <select class="input w-140" name="part" aria-label="Partition" [ngModel]="req().partition" (ngModelChange)="patch({ partition: +$event })">
+          <option [value]="-1">All partitions</option>
+          @for (p of partitions(); track p.id) { <option [value]="p.id">Partition {{ p.id }}</option> }
+        </select>
+        <select class="input w-100" name="limit" aria-label="Limit" [ngModel]="req().limit" (ngModelChange)="patch({ limit: +$event })">
+          @for (n of [50, 100, 500, 1000, 5000]; track n) { <option [value]="n">{{ n }} msgs</option> }
+        </select>
+      </div>
+    }
+  </form>
+</section>
+
+<div class="status dim">
+  @if (live()) {
+    <span><span class="pulse sm"></span> {{ livePaused() ? 'Paused' : 'Listening for new messages' }} — {{ records().length | num }} received</span>
+  } @else if (meta(); as m) {
+    <span>{{ records().length | num }} shown · {{ m.scanned | num }} scanned · {{ m.ms }} ms</span>
+    @if (m.partial) { <span class="badge warn">partial — scan limit reached, narrow the range</span> }
+  }
+</div>
+
+<div class="split">
+  <section class="card list">
+    <div class="table-wrap" tabindex="0" (keydown)="rowKey($event)" aria-label="Messages">
+      <table class="t msgs">
+        <thead><tr><th class="num">Part</th><th class="num">Offset</th><th>Timestamp</th><th>Key</th><th>Value</th></tr></thead>
+        <tbody>
+          @for (r of records(); track r.partition + ':' + r.offset) {
+            <tr class="clickable" [class.selected]="r === selected()" (click)="select(r)">
+              <td class="num mono">{{ r.partition }}</td>
+              <td class="num mono">{{ r.offset }}</td>
+              <td class="mono nowrap dim">{{ r.timestamp | time }}</td>
+              <td class="mono trunc key">@if (r.key == null) { <span class="dim">null</span> } @else { {{ preview(r.key) }} }</td>
+              <td class="mono trunc">@if (r.value == null) { <span class="dim">null</span> } @else { {{ preview(r.value) }} }</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5">
+              <div class="empty">
+                @if (browsing()) { <span class="spin"></span> }
+                @else if (live()) { <app-icon name="zap" /><strong>Waiting for messages…</strong><span>New records appear here as they are produced.</span> }
+                @else { <app-icon name="inbox" /><strong>No messages</strong><span>Try another start position, partition or filter.</span> }
+              </div>
+            </td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <aside class="card inspector" app-inspector [record]="selected()" [readOnly]="readOnly()" (resend)="resend.emit($event)"></aside>
+</div>

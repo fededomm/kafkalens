@@ -9,7 +9,7 @@ const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'overview' },
       { path: 'overview', loadComponent: () => import('./pages/overview').then((m) => m.OverviewPage), title: 'Overview · KafkaLens' },
       { path: 'topics', loadComponent: () => import('./pages/topics').then((m) => m.TopicsPage), title: 'Topics · KafkaLens' },
-      { path: 'topics/:topic', loadComponent: () => import('./pages/topic').then((m) => m.TopicPage), title: 'Topic · KafkaLens' },
+      { path: 'topics/:topic', loadComponent: () => import('./pages/topic/topic').then((m) => m.TopicPage), title: 'Topic · KafkaLens' },
       { path: 'groups', loadComponent: () => import('./pages/groups').then((m) => m.GroupsPage), title: 'Consumer groups · KafkaLens' },
       { path: 'groups/:group', loadComponent: () => import('./pages/group').then((m) => m.GroupPage), title: 'Consumer group · KafkaLens' },
     ],
