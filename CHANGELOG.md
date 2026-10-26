@@ -18,11 +18,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Export buttons moved.** **Export messages** is now in the topic header, and **Export config** is in the toolbar of the *Configuration* tab.
 - The message list no longer shows the keyboard hint or a focus outline. The ↑/↓ (and j/k) keys still move between messages.
 - **Backend reorganized.** API routes now run on [chi](https://github.com/go-chi/chi), and the Go code is split into `internal/api`, `internal/kafka`, `internal/store` and `internal/config`. The API paths and responses are unchanged, except that unknown `/api` routes and wrong methods now get a JSON error (404 / 405) instead of a plain-text one.
+- **Go 1.27.2.** The project now builds with Go 1.27.2 (previously 1.26.9), as set in `go.mod`; CI and the desktop build pick it up from there.
 
 ### Fixed
 
 - The offset and time fields in the message search bar no longer shrink to nothing at some window widths (a regression in 0.3.0).
 - Date and time fields use the theme colors instead of the system blue for the selected part.
+- The topic list and the overview no longer fail with `TOPIC_AUTHORIZATION_FAILED` after opening a topic or consumer group whose lag involves topics you are not authorized on. They now read fresh metadata instead of the client cache, and start/end offsets are requested only for the listed topics.
+- In the consumer group list, the row borders in the *Topics* column line up with the rest of the row again, and group names no longer wrap onto two lines.
 
 ## [0.3.1] - 2026-10-16
 
