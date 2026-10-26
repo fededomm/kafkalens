@@ -27,6 +27,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The topic list and the overview no longer fail with `TOPIC_AUTHORIZATION_FAILED` after opening a topic or consumer group whose lag involves topics you are not authorized on. They now read fresh metadata instead of the client cache, and start/end offsets are requested only for the listed topics.
 - In the consumer group list, the row borders in the *Topics* column line up with the rest of the row again, and group names no longer wrap onto two lines.
 
+### Security
+
+- Updated dependencies flagged by `trivy fs`: `github.com/labstack/echo/v4` 4.16.1 (used by Wails), `golang.org/x/crypto` 0.57.0, `golang.org/x/net` 0.60.0, `golang.org/x/text` 0.42.0, and in the UI `zod` 4.6.6 (via `@angular/cli` / `@angular/build` 22.2.4).
+
 ## [0.3.1] - 2026-10-16
 
 ### Added
