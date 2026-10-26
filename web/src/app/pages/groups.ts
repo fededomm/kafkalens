@@ -46,13 +46,13 @@ export function stateClass(s: string) {
         <tbody>
           @for (g of visible(); track g.group) {
             <tr class="clickable" (click)="open(g)">
-              <td class="name"><a [routerLink]="[g.group]" (click)="$event.stopPropagation()">{{ g.group }}</a></td>
+              <td class="name nowrap"><a [routerLink]="[g.group]" (click)="$event.stopPropagation()">{{ g.group }}</a></td>
               <td><span class="badge {{ cls(g.state) }}"><span class="dot"></span>{{ g.state || 'Unknown' }}</span></td>
               <td class="num">{{ g.members }}</td>
-              <td class="topics">
+              <td><div class="topics">
                 @for (t of g.topics.slice(0, 3); track t) { <span class="badge mono">{{ t }}</span> }
                 @if (g.topics.length > 3) { <span class="dim">+{{ g.topics.length - 3 }}</span> }
-              </td>
+              </div></td>
               <td class="num" [class.dim]="g.lag === 0" [class.lag-on]="g.lag > 0" [class.lag-hot]="g.lag > 1000">{{ g.lag | num }}</td>
               <td class="num mono dim">{{ g.coordinator }}</td>
             </tr>
@@ -73,6 +73,7 @@ export function stateClass(s: string) {
 .grow { flex: 1; max-width: 420px; }
 .topics { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .topics .badge { height: 20px; font-weight: 500; }
+.nowrap { white-space: nowrap; }
 .m { margin: 12px 14px; }
 `,
 })
