@@ -18,7 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Export buttons moved.** **Export messages** is now in the topic header, and **Export config** is in the toolbar of the *Configuration* tab.
 - The message list no longer shows the keyboard hint or a focus outline. The ↑/↓ (and j/k) keys still move between messages.
 - **Backend reorganized.** API routes now run on [chi](https://github.com/go-chi/chi), and the Go code is split into `internal/api`, `internal/kafka`, `internal/store` and `internal/config`. The API paths and responses are unchanged, except that unknown `/api` routes and wrong methods now get a JSON error (404 / 405) instead of a plain-text one.
-- **Go 1.27.2.** The project now builds with Go 1.27.2 (previously 1.26.9), as set in `go.mod`; CI and the desktop build pick it up from there.
+- **Go 1.27.3.** The project now builds with Go 1.27.3 (previously 1.26.9), as set in `go.mod`; CI and the desktop build pick it up from there.
 
 ### Fixed
 
