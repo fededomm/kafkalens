@@ -8,11 +8,11 @@
 # The desktop app uses the embedded copy: edit this file and rebuild, or use the environment.
 
 server:                  # browser mode only
-  addr: 127.0.0.1:8088   # listen address; keep it on loopback, the API has no authentication
+  addr: 127.0.0.1:8088   # listen address; keep it on loopback (no authentication; Host must be localhost or a loopback IP)
   openBrowser: true      # open the UI in the default browser at startup
 
 # Saved connections. Empty = <user config dir>/kafkalens/clusters.json.
 clusters: ""
 
 log:
-  level: debug            # debug | info | warn | error
+  level: debug           # debug | info | warn | error

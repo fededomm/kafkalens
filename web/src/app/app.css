@@ -17,7 +17,7 @@
   border-left: 3px solid var(--cluster, var(--accent));
 }
 .switch-btn:hover { border-color: var(--border-strong); border-left-color: var(--cluster, var(--accent)); }
-.cdot { width: 9px; height: 9px; border-radius: 3px; flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 0%, transparent); }
+.cdot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
 .cname { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20; padding: 6px;
@@ -55,9 +55,8 @@
 /* command palette */
 dialog.palette { width: min(620px, calc(100vw - 32px)); margin-top: 12vh; }
 .pal-input { padding: 12px; border-bottom: 1px solid var(--border); }
-.pal-input .input { height: 42px; font-size: 15px; border: 0; background: transparent; box-shadow: none; }
+.pal-input .input { height: 42px; font-size: 15px; border: 0; background: transparent; box-shadow: none; padding-left: 36px; }
 .pal-input app-icon { position: absolute; left: 22px; top: 50%; translate: 0 -50%; color: var(--text-3); }
-.pal-input .input { padding-left: 36px; }
 .pal-list { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow: auto; }
 .pal-list li { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 7px; cursor: pointer; }
 .pal-list li.on { background: var(--accent-soft); }

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 	"kafkalens/internal/kafka"
 )
 
-func (a *API) browse(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) browse(r *http.Request, c cctx) (any, error) {
 	req := kafka.BrowseReq{Partition: -1}
 	if err := decode(r, &req); err != nil {
 		return nil, err
@@ -19,24 +20,23 @@ func (a *API) browse(w http.ResponseWriter, r *http.Request, c cctx) (any, error
 	return kafka.Browse(r.Context(), c.cluster, c.adm, r.PathValue("topic"), req)
 }
 
-// tail streams new records as Server-Sent Events until the browser disconnects.
+// tail streams new records as Server-Sent Events until the browser disconnects; a Kafka error
+// ends the stream with a "fail" event whose data is the JSON-encoded message.
 func (a *API) tail(w http.ResponseWriter, r *http.Request) {
 	cl, ok := a.store.Get(r.PathValue("id"))
 	if !ok {
 		reply(w, nil, httpErr{http.StatusNotFound, "cluster not found"})
 		return
 	}
-	if !kafka.AcquireTail() {
-		reply(w, nil, httpErr{http.StatusTooManyRequests, "too many live tails open"})
-		return
+	k, stop, err := kafka.OpenTail(cl, r.PathValue("topic"))
+	if errors.Is(err, kafka.ErrTooManyTails) {
+		err = httpErr{http.StatusTooManyRequests, err.Error()}
 	}
-	defer kafka.ReleaseTail()
-	k, err := kafka.OpenTail(cl, r.PathValue("topic"))
 	if err != nil {
 		reply(w, nil, err)
 		return
 	}
-	defer k.Close()
+	defer stop()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
@@ -45,16 +45,21 @@ func (a *API) tail(w http.ResponseWriter, r *http.Request) {
 	if rc.Flush() != nil {
 		return
 	}
-	kafka.PumpTail(r.Context(), k, func(batch []kafka.Record) error {
+	err = kafka.PumpTail(r.Context(), k, func(batch []kafka.Record) error {
 		for _, rec := range batch {
 			b, _ := json.Marshal(rec)
 			fmt.Fprintf(w, "data: %s\n\n", b)
 		}
 		return rc.Flush() // client gone or writer can't stream
 	})
+	if err != nil {
+		b, _ := json.Marshal(err.Error())
+		fmt.Fprintf(w, "event: fail\ndata: %s\n\n", b)
+		rc.Flush()
+	}
 }
 
-func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) produce(r *http.Request, c cctx) (any, error) {
 	var req struct {
 		Partition int32          `json:"partition"` // -1 = partitioner decides
 		Key       *string        `json:"key"`
@@ -73,10 +78,11 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		return nil, bad("template and base64 are mutually exclusive")
 	}
 
-	// each field becomes a per-record renderer; without templating it returns the same bytes every time
+	// each field becomes a per-record renderer; without templating it returns the same bytes every
+	// time. b64 values are decoded, never templated.
 	tm := newMsgTemplates()
-	field := func(name string, s *string) (func() ([]byte, error), error) {
-		if req.Template {
+	field := func(name string, s *string, b64 bool) (func() ([]byte, error), error) {
+		if req.Template && !b64 {
 			f, err := tm.parse(s)
 			if err != nil {
 				return nil, bad("%s: %v", name, err)
@@ -86,7 +92,7 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		var b []byte
 		if s != nil {
 			b = []byte(*s)
-			if req.Base64 {
+			if b64 {
 				var err error
 				if b, err = base64.StdEncoding.DecodeString(*s); err != nil {
 					return nil, bad("%s: %v", name, err)
@@ -95,11 +101,11 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		}
 		return func() ([]byte, error) { return b, nil }, nil
 	}
-	key, err := field("key", req.Key)
+	key, err := field("key", req.Key, req.Base64)
 	if err != nil {
 		return nil, err
 	}
-	val, err := field("value", req.Value)
+	val, err := field("value", req.Value, req.Base64)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +118,9 @@ func (a *API) produce(w http.ResponseWriter, r *http.Request, c cctx) (any, erro
 		if h.Key == "" {
 			continue
 		}
-		v := h.Value
-		var f func() ([]byte, error)
-		if req.Template {
-			if f, err = tm.parse(&v); err != nil {
-				return nil, bad("header %s: %v", h.Key, err)
-			}
-		} else {
-			f = func() ([]byte, error) { return []byte(v), nil }
+		f, err := field("header "+h.Key, &h.Value, h.Binary)
+		if err != nil {
+			return nil, err
 		}
 		hs = append(hs, hdr{h.Key, f})
 	}

@@ -1,4 +1,4 @@
-import { Component, effect, ElementRef, inject, input, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, resource, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, Broker, ConfigEntry, Overview, Toasts } from '../api';
 import { NumPipe } from '../fmt';
@@ -15,19 +15,19 @@ import { ConfigTable } from './config-table';
       <h1>Overview</h1>
       <p class="sub mono">{{ data()?.clusterId ?? '…' }}</p>
     </div>
-    <button class="btn" (click)="load()" [disabled]="loading()">
-      @if (loading()) { <span class="spin"></span> } @else { <app-icon name="refresh" /> } Refresh
+    <button class="btn" (click)="res.reload()" [disabled]="res.isLoading()">
+      @if (res.isLoading()) { <span class="spin"></span> } @else { <app-icon name="refresh" /> } Refresh
     </button>
   </header>
 
-  @if (error(); as e) {
-    <div class="alert err"><app-icon name="alert" /> <div><b>Can't reach the cluster.</b> {{ e }}</div></div>
+  @if (res.error(); as e) {
+    <div class="alert err"><app-icon name="alert" /> <div><b>Can't reach the cluster.</b> {{ e.message }}</div></div>
   }
 
   <div class="grid-stats">
-    <a class="card stat" [routerLink]="['/c', id(), 'overview']" fragment="brokers">
+    <button class="card stat" (click)="brokersSec.scrollIntoView({ behavior: 'smooth' })">
       <span class="label">Brokers</span><span class="value">{{ data()?.brokers?.length | num }}</span>
-    </a>
+    </button>
     <a class="card stat" [routerLink]="['/c', id(), 'topics']">
       <span class="label">Topics</span><span class="value">{{ data()?.topics | num }}</span>
     </a>
@@ -45,7 +45,7 @@ import { ConfigTable } from './config-table';
     </div>
   </div>
 
-  <section class="card" id="brokers">
+  <section class="card" #brokersSec>
     <div class="card-head"><h2>Brokers</h2><span class="dim">Click a broker to inspect its configuration</span></div>
     <div class="table-wrap">
       <table class="t">
@@ -61,7 +61,7 @@ import { ConfigTable } from './config-table';
               <td><div class="bar"><i [style.width.%]="share(b)"></i></div></td>
             </tr>
           } @empty {
-            @if (loading()) {
+            @if (res.isLoading()) {
               @for (i of [1, 2, 3]; track i) { <tr><td colspan="6"><div class="skeleton"></div></td></tr> }
             }
           }
@@ -82,8 +82,9 @@ import { ConfigTable } from './config-table';
 </dialog>
 `,
   styles: `
-a.stat { color: inherit; transition: border-color .15s; }
-a.stat:hover { text-decoration: none; border-color: var(--border-strong); }
+a.stat, button.stat { color: inherit; transition: border-color .15s; }
+button.stat { font: inherit; text-align: left; cursor: pointer; }
+a.stat:hover, button.stat:hover { text-decoration: none; border-color: var(--border-strong); }
 .bar { max-width: 160px; }
 .cfg-body { margin-top: 14px; border-top: 1px solid var(--border); max-height: 65vh; overflow: auto; }
 `,
@@ -94,27 +95,10 @@ export class OverviewPage {
   private readonly toasts = inject(Toasts);
   private readonly dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
 
-  protected readonly data = signal<Overview | null>(null);
-  protected readonly loading = signal(false);
-  protected readonly error = signal<string | null>(null);
+  protected readonly res = resource({ params: () => this.id(), loader: ({ params }) => this.api.get<Overview>(`/c/${params}/overview`) });
+  protected readonly data = computed(() => (this.res.hasValue() ? this.res.value() : null));
   protected readonly broker = signal<Broker | null>(null);
   protected readonly brokerCfg = signal<ConfigEntry[] | null>(null);
-
-  constructor() {
-    effect(() => { this.id(); this.data.set(null); this.load(); });
-  }
-
-  async load() {
-    this.loading.set(true);
-    try {
-      this.data.set(await this.api.get<Overview>(`/c/${this.id()}/overview`));
-      this.error.set(null);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : String(e));
-    } finally {
-      this.loading.set(false);
-    }
-  }
 
   share(b: Broker) {
     const total = this.data()?.partitions || 1;
@@ -124,11 +108,12 @@ export class OverviewPage {
   async openBroker(b: Broker) {
     this.broker.set(b);
     this.brokerCfg.set(null);
-    this.dlg().nativeElement.showModal();
-    try {
-      this.brokerCfg.set(await this.api.get<ConfigEntry[]>(`/c/${this.id()}/brokers/${b.id}/configs`));
-    } catch (e) {
-      this.toasts.err(e);
-    }
+    const dlg = this.dlg().nativeElement;
+    dlg.showModal();
+    await this.toasts.guard(async () => {
+      const cfg = await this.api.get<ConfigEntry[]>(`/c/${this.id()}/brokers/${b.id}/configs`);
+      if (this.broker() === b) this.brokerCfg.set(cfg);
+    });
+    if (this.broker() === b && !this.brokerCfg()) dlg.close(); // failed: the toast explains, no endless spinner
   }
 }

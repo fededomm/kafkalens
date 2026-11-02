@@ -14,33 +14,24 @@
   <div class="insp-body">
     <div class="kv"><span class="dim">Timestamp</span><span class="mono">{{ r.timestamp | time }}</span></div>
 
-    <div class="block">
-      <div class="block-head"><h3>Key</h3>
-        @if (r.key != null) { <button class="btn ghost icon sm" (click)="copy(selKey().text, 'Key')" aria-label="Copy key"><app-icon name="copy" /></button> }
+    @for (b of [{ h: 'Key', v: selKey(), nul: 'null' }, { h: 'Value', v: selValue(), nul: 'null (tombstone)' }]; track b.h) {
+      <div class="block">
+        <div class="block-head"><h3>{{ b.h }}</h3>
+          @if (b.v.kind !== 'null') { <button class="btn ghost icon sm" (click)="copy(b.v.text, b.h)" [attr.aria-label]="'Copy ' + b.h"><app-icon name="copy" /></button> }
+        </div>
+        @switch (b.v.kind) {
+          @case ('null') { <pre class="code dim">{{ b.nul }}</pre> }
+          @case ('json') { <pre class="code" [innerHTML]="b.v.html"></pre> }
+          @default { <pre class="code">{{ b.v.text }}</pre> }
+        }
       </div>
-      @switch (selKey().kind) {
-        @case ('null') { <pre class="code dim">null</pre> }
-        @case ('json') { <pre class="code" [innerHTML]="selKey().html"></pre> }
-        @default { <pre class="code">{{ selKey().text }}</pre> }
-      }
-    </div>
-
-    <div class="block">
-      <div class="block-head"><h3>Value</h3>
-        @if (r.value != null) { <button class="btn ghost icon sm" (click)="copy(selValue().text, 'Value')" aria-label="Copy value"><app-icon name="copy" /></button> }
-      </div>
-      @switch (selValue().kind) {
-        @case ('null') { <pre class="code dim">null (tombstone)</pre> }
-        @case ('json') { <pre class="code" [innerHTML]="selValue().html"></pre> }
-        @default { <pre class="code">{{ selValue().text }}</pre> }
-      }
-    </div>
+    }
 
     <div class="block">
       <div class="block-head"><h3>Headers <span class="count">{{ r.headers.length }}</span></h3></div>
       @if (r.headers.length) {
         <table class="t hdrs">
-          @for (h of r.headers; track $index) { <tr><td class="mono dim">{{ h.key }}</td><td class="mono">{{ h.value }}</td></tr> }
+          @for (h of r.headers; track $index) { <tr><td class="mono dim">{{ h.key }} @if (h.binary) { <span class="badge warn" title="Not UTF-8: shown as base64">base64</span> }</td><td class="mono">{{ h.value }}</td></tr> }
         </table>
       } @else { <span class="dim small">No headers</span> }
     </div>

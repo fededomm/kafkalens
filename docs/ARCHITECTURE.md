@@ -13,7 +13,7 @@ The build tag `desktop` picks the entry point; everything else is shared.
 
 | Piece | Role |
 |---|---|
-| `web/` | Angular UI. Talks only to `/api/…`; in desktop mode it also uses the Wails bridge for live tail and native save dialogs. Theme and favorite topics live in `localStorage`. |
+| `web/` | Angular UI. Talks only to `/api/…`; in desktop mode it also uses the Wails bridge for live tail and native save dialogs. Theme, favorite topics and topic folders live in `localStorage`. |
 | `server.go` | Browser mode: listens on `127.0.0.1:8088` (`-addr`), opens the default browser. Pure Go, no cgo. |
 | `desktop.go` | Desktop mode: serves the same handler through Wails' in-process asset server. Wails buffers whole responses, so live tail goes through Wails events and exports through `SaveFile`. |
 | `config.yaml`, `internal/config` | Startup settings (address, open browser, clusters file, log level), read with viper. Layers: embedded `config.yaml` (defaults) → `./config.yaml` or `-settings` (browser mode only, checked on its own before merging) → `KAFKALENS_<SECTION>_<KEY>` env → flags (browser mode only). Unknown keys, wrong types and invalid values stop the start with a clear error. |

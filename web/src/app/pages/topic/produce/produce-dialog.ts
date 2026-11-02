@@ -1,6 +1,7 @@
-import { afterNextRender, Component, ElementRef, inject, Injector, input, output, signal, viewChild } from '@angular/core';
+import { afterNextRender, ChangeDetectorRef, Component, ElementRef, inject, Injector, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, Header, KRecord, Partition, Toasts } from '../../../api';
+import { prettyJson } from '../../../fmt';
 import { Icon } from '../../../icon';
 import { tplHtml, tplStub } from '../../../tpl';
 
@@ -19,23 +20,25 @@ export class ProduceDialog {
   private readonly api = inject(Api);
   private readonly toasts = inject(Toasts);
   private readonly injector = inject(Injector);
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
   private readonly keyInput = viewChild<ElementRef<HTMLInputElement>>('keyInput');
   private readonly valInput = viewChild<ElementRef<HTMLTextAreaElement>>('valInput');
 
-  protected pr = { key: '', value: '', partition: -1, count: 1, headers: [] as Header[], keyNull: false, template: false };
+  protected pr = { key: '', value: '', partition: -1, count: 1, headers: [] as Header[], keyNull: false, template: false, base64: false };
   protected readonly producing = signal(false);
   protected readonly valueJsonState = signal<'json' | 'text' | 'invalid'>('text');
   protected readonly tplHtml = tplHtml;
 
-  /** Opens the dialog empty, or prefilled with a copy of `from`. */
+  /** Opens the dialog empty, or prefilled with a copy of `from` (binary key/value stay base64 and are sent decoded). */
   open(from?: KRecord) {
     this.pr = {
       key: from?.key ?? '', value: from?.value ?? '', partition: -1, count: 1,
       headers: from ? from.headers.map((h) => ({ ...h })) : [], keyNull: from ? from.key == null : false,
-      template: this.pr.template,
+      template: from?.binary ? false : this.pr.template, base64: !!from?.binary,
     };
     this.checkJson();
+    this.cdr.markForCheck(); // OnPush + zoneless: called from the parent's template and pr is a plain field
     this.dlg().nativeElement.showModal();
     afterNextRender(() => (from ? this.valInput() : this.keyInput() ?? this.valInput())?.nativeElement.focus(), { injector: this.injector });
   }
@@ -55,24 +58,18 @@ export class ProduceDialog {
     try { JSON.parse(v); this.valueJsonState.set('json'); } catch { this.valueJsonState.set('invalid'); }
   }
 
-  formatJson() {
-    try { this.pr.value = JSON.stringify(JSON.parse(this.pr.value), null, 2); this.checkJson(); } catch { this.toasts.err('Value is not valid JSON'); }
-  }
+  formatJson() { this.pr.value = prettyJson(this.pr.value) ?? this.pr.value; }
 
-  async produce() {
-    this.producing.set(true);
-    try {
+  produce() {
+    if (this.producing()) return; // Ctrl+Enter bypasses the disabled Send button
+    return this.toasts.guard(async () => {
       const res = await this.api.post<{ count: number; partition: number; offset: number }>(`${this.base()}/produce`, {
-        key: this.pr.keyNull ? null : this.pr.key, value: this.pr.value, partition: this.pr.partition,
-        count: this.pr.count, headers: this.pr.headers.filter((h) => h.key), template: this.pr.template,
+        key: this.pr.keyNull ? null : this.pr.key, value: this.pr.value, partition: this.pr.partition, count: this.pr.count,
+        headers: this.pr.headers.filter((h) => h.key), template: this.pr.template, base64: this.pr.base64,
       });
       this.toasts.ok(res.count > 1 ? `Produced ${res.count} messages` : `Produced to partition ${res.partition} @ offset ${res.offset}`);
       this.dlg().nativeElement.close();
       this.produced.emit();
-    } catch (e) {
-      this.toasts.err(e);
-    } finally {
-      this.producing.set(false);
-    }
+    }, this.producing);
   }
 }

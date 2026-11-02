@@ -13,28 +13,29 @@ export class NumPipe implements PipeTransform {
   }
 }
 
-export function fmtTime(ms: number) {
-  const d = new Date(ms);
-  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
-}
-
 @Pipe({ name: 'time' })
 export class TimePipe implements PipeTransform {
-  transform(ms: number) { return fmtTime(ms); }
-}
-
-export function fmtBytes(n: number) {
-  if (n < 1024) return `${n} B`;
-  const u = ['KB', 'MB', 'GB', 'TB'];
-  let i = -1;
-  do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
-  return `${n.toFixed(1)} ${u[i]}`;
+  transform(ms: number) {
+    const d = new Date(ms);
+    const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  }
 }
 
 @Pipe({ name: 'bytes' })
 export class BytesPipe implements PipeTransform {
-  transform(n: number) { return fmtBytes(n); }
+  transform(n: number) {
+    if (n < 1024) return `${n} B`;
+    const u = ['KB', 'MB', 'GB', 'TB'];
+    let i = -1;
+    do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+    return `${n.toFixed(1)} ${u[i]}`;
+  }
+}
+
+/** Badge class of a consumer group state. */
+export function stateClass(s: string) {
+  return s === 'Stable' ? 'ok' : s === 'Empty' ? '' : s === 'Dead' ? 'err' : 'warn';
 }
 
 /** Pretty-prints JSON if the string parses, otherwise returns null. */
@@ -60,13 +61,15 @@ export function highlightJson(pretty: string): string {
   );
 }
 
-export function download(name: string, content: string, type = 'application/json') {
+/** Saves a JSON file. Resolves to the saved path on desktop ("" if cancelled) and to "" in the browser. */
+export async function download(name: string, content: string): Promise<string> {
   // desktop webviews don't reliably handle <a download>: use a native save dialog
   const d = desktop();
-  if (d) return void d.SaveFile(name, content);
+  if (d) return d.SaveFile(name, content);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
   a.download = name;
   a.click();
   URL.revokeObjectURL(a.href);
+  return '';
 }

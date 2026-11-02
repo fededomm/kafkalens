@@ -1,6 +1,6 @@
 <div class="page topic-page">
   <header class="page-head">
-    <div class="title">
+    <div class="page-title">
       <nav class="crumbs dim"><a [routerLink]="['/c', id(), 'topics']">Topics</a> <app-icon name="chevron-right" /></nav>
       <div class="row">
         <h1 class="mono">{{ topic() }}</h1>
@@ -18,13 +18,17 @@
     <div class="row">
       <button class="btn" (click)="messages()?.exportJson()" [disabled]="!messages()?.records()?.length" title="Download the messages currently shown as JSON"><app-icon name="download" /> Export messages</button>
       <button class="btn" (click)="produce.open()" [disabled]="readOnly()"><app-icon name="send" /> Produce</button>
-      <button class="btn danger icon" (click)="askDelete()" [disabled]="readOnly() || detail()?.internal" aria-label="Delete topic" title="Delete topic">
+      <button class="btn danger" (click)="truncate()" [disabled]="readOnly() || detail()?.internal || busy() || !totalMessages() || compactOnly()"
+        [title]="compactOnly() ? 'Kafka refuses to delete records of a compacted topic (cleanup.policy without delete)' : 'Delete all messages, keep the topic and its configuration'">
+        <app-icon name="trash" /> Delete messages
+      </button>
+      <button class="btn danger icon" (click)="deleteTopic()" [disabled]="readOnly() || detail()?.internal || busy()" aria-label="Delete topic" title="Delete topic">
         <app-icon name="trash" />
       </button>
     </div>
   </header>
 
-  @if (error(); as e) { <div class="alert err"><app-icon name="alert" /> {{ e }}</div> }
+  @if (res.error(); as e) { <div class="alert err"><app-icon name="alert" /> {{ e.message }}</div> }
 
   <div class="tabs" role="tablist">
     <button role="tab" [attr.aria-selected]="tab() === 'messages'" [class.on]="tab() === 'messages'" (click)="tab.set('messages')">Messages</button>
@@ -38,7 +42,7 @@
 
   @switch (tab()) {
     @case ('partitions') {
-      <app-topic-partitions [partitions]="detail()?.partitions ?? []" [total]="totalMessages()" [readOnly]="readOnly()" [base]="base()" (changed)="loadDetail()" />
+      <app-topic-partitions [partitions]="detail()?.partitions ?? []" [total]="totalMessages()" [readOnly]="readOnly()" [base]="base()" (changed)="res.reload()" />
     }
     @case ('configs') {
       <section class="card">
@@ -51,24 +55,10 @@
     }
 
     @case ('consumers') {
-      <app-topic-consumers [id]="id()" [groups]="detail()?.groups ?? []" />
+      <app-topic-consumers [id]="id()" [groups]="detail()?.groups ?? []" [error]="detail()?.groupsError" />
     }
   }
 </div>
 
 <app-produce-dialog #produce [topic]="topic()" [base]="base()" [partitions]="detail()?.partitions ?? []" (produced)="onProduced()" />
 
-<dialog #deleteDlg class="dlg">
-  <form (ngSubmit)="deleteTopic()">
-    <div class="dlg-head"><div><h2>Delete topic</h2><p>This permanently deletes <b class="mono">{{ topic() }}</b> and all of its messages.</p></div></div>
-    <div class="dlg-body">
-      <label class="field"><span>Type the topic name to confirm</span>
-        <input class="input mono" name="confirm" [(ngModel)]="confirmText" autocomplete="off" />
-      </label>
-    </div>
-    <div class="dlg-foot">
-      <button type="button" class="btn ghost" (click)="deleteDlg.close()">Cancel</button>
-      <button class="btn danger solid" [disabled]="confirmText !== topic()">Delete topic</button>
-    </div>
-  </form>
-</dialog>

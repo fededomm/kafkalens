@@ -10,6 +10,7 @@ run: build
 	./bin/kafkalens
 
 dev:                  ## backend on :8088 + ng serve on :4200 (proxied)
+	@test -d web/dist/web/browser || $(MAKE) web
 	go run . -no-open & cd web && npx ng serve
 
 kafka:                ## local Kafka on localhost:9092

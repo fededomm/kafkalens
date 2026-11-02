@@ -44,7 +44,7 @@ func (c Cluster) Public() map[string]any {
 // reused only when it would go to the same brokers the same way, so an edited
 // request can't replay it to another host or downgrade it to PLAIN/plaintext.
 func WithSecrets(c, stored Cluster) (Cluster, error) {
-	if c.TLSKey == "" {
+	if c.TLSKey == "" && c.TLSCert != "" { // a cleared certificate drops the key too
 		c.TLSKey = stored.TLSKey
 	}
 	if c.SASLPassword != "" || c.SASLMechanism == "" || stored.SASLPassword == "" {
@@ -101,34 +101,36 @@ func (s *Store) Get(id string) (Cluster, bool) {
 func (s *Store) Save(c Cluster) (Cluster, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	next := slices.Clone(s.clusters)
 	if c.ID == "" {
 		b := make([]byte, 6)
 		rand.Read(b)
 		c.ID = hex.EncodeToString(b)
-		s.clusters = append(s.clusters, c)
+		next = append(next, c)
 	} else {
-		i := slices.IndexFunc(s.clusters, func(x Cluster) bool { return x.ID == c.ID })
+		i := slices.IndexFunc(next, func(x Cluster) bool { return x.ID == c.ID })
 		if i < 0 {
 			return c, errors.New("cluster not found")
 		}
-		s.clusters[i] = c
+		next[i] = c
 	}
-	return c, s.flush()
+	return c, s.flush(next)
 }
 
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.clusters = slices.DeleteFunc(s.clusters, func(c Cluster) bool { return c.ID == id })
-	return s.flush()
+	return s.flush(slices.DeleteFunc(slices.Clone(s.clusters), func(c Cluster) bool { return c.ID == id }))
 }
 
-func (s *Store) flush() error {
+// flush writes cs to the file and, only once it is written, makes it the current list.
+func (s *Store) flush(cs []Cluster) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(s.clusters, "", "  ")
-	// temp file (created 0600) + rename: a crash never leaves a half-written file
+	b, _ := json.MarshalIndent(cs, "", "  ")
+	// temp file (created 0600), synced, then renamed over the old one: even a power cut
+	// leaves the old or the new file, never a half-written one
 	f, err := os.CreateTemp(filepath.Dir(s.path), ".clusters-*.json")
 	if err != nil {
 		return err
@@ -138,8 +140,16 @@ func (s *Store) flush() error {
 		f.Close()
 		return err
 	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(f.Name(), s.path)
+	if err := os.Rename(f.Name(), s.path); err != nil {
+		return err
+	}
+	s.clusters = cs
+	return nil
 }

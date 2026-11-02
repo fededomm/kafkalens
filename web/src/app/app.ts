@@ -1,9 +1,9 @@
-import { Component, computed, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { afterRenderEffect, Component, computed, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { filter, map } from 'rxjs';
-import { Api, GroupRow, Toasts, TopicRow } from './api';
+import { Api, Confirm, Toasts } from './api';
 import { Icon } from './icon';
 
 interface PaletteItem { label: string; hint: string; icon: string; link: string[] }
@@ -17,7 +17,9 @@ interface PaletteItem { label: string; hint: string; icon: string; link: string[
 export class App {
   protected readonly api = inject(Api);
   protected readonly toasts = inject(Toasts);
+  protected readonly confirm = inject(Confirm);
   private readonly router = inject(Router);
+  private readonly confirmDlg = viewChild.required<ElementRef<HTMLDialogElement>>('confirmDlg');
 
   private readonly url = toSignal(
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd), map((e) => e.urlAfterRedirects)),
@@ -31,7 +33,7 @@ export class App {
   protected readonly switcherOpen = signal(false);
 
   // command palette
-  private readonly paletteDlg = viewChild<ElementRef<HTMLDialogElement>>('palette');
+  private readonly paletteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('palette');
   private readonly toastLayer = viewChild.required<ElementRef<HTMLElement>>('toastLayer');
   protected readonly query = signal('');
   protected readonly active = signal(0);
@@ -57,6 +59,14 @@ export class App {
       if (el.matches(':popover-open')) el.hidePopover();
       if (this.toasts.items().length) el.showPopover();
     });
+    // after render, so showModal focuses the typed-name input when there is one (else Cancel)
+    afterRenderEffect(() => {
+      // Esc closes the dialog natively: its close event answers false
+      const dlg = this.confirmDlg().nativeElement;
+      if (this.confirm.req()) { if (!dlg.open) dlg.showModal(); } else if (dlg.open) dlg.close();
+    });
+    // the asking page goes away (Ctrl+K and Back work under the modal): never act on its behalf
+    this.router.events.subscribe((e) => e instanceof NavigationStart && this.confirm.answer(false));
     effect(() => {
       const c = this.cluster();
       document.documentElement.style.setProperty('--cluster', c?.color || 'var(--accent)');
@@ -74,8 +84,8 @@ export class App {
   }
 
   async openPalette() {
-    const dlg = this.paletteDlg()?.nativeElement;
-    if (!dlg || dlg.open) return;
+    const dlg = this.paletteDlg().nativeElement;
+    if (dlg.open) return;
     this.query.set('');
     this.active.set(0);
     const items: PaletteItem[] = this.api.clusters().map((c) => ({ label: c.name, hint: 'Cluster', icon: 'server', link: ['/c', c.id] }));
@@ -84,12 +94,13 @@ export class App {
     const id = this.clusterId();
     if (!id) return;
     const [topics, groups] = await Promise.all([
-      this.api.get<TopicRow[]>(`/c/${id}/topics`).catch(() => []),
-      this.api.get<GroupRow[]>(`/c/${id}/groups`).catch(() => []),
+      this.api.get<string[]>(`/c/${id}/topics?names`).catch(() => []),
+      this.api.get<string[]>(`/c/${id}/groups?names`).catch(() => []),
     ]);
+    if (!dlg.open || this.clusterId() !== id) return; // late answer: palette closed, maybe reopened in another cluster
     this.index.set([
-      ...topics.map((t) => ({ label: t.name, hint: 'Topic', icon: 'topics', link: ['/c', id, 'topics', t.name] })),
-      ...groups.map((g) => ({ label: g.group, hint: 'Consumer group', icon: 'groups', link: ['/c', id, 'groups', g.group] })),
+      ...topics.map((t) => ({ label: t, hint: 'Topic', icon: 'topics', link: ['/c', id, 'topics', t] })),
+      ...groups.map((g) => ({ label: g, hint: 'Consumer group', icon: 'groups', link: ['/c', id, 'groups', g] })),
       ...items,
     ]);
   }
@@ -102,7 +113,7 @@ export class App {
   }
 
   go(it: PaletteItem) {
-    this.paletteDlg()?.nativeElement.close();
+    this.paletteDlg().nativeElement.close();
     this.router.navigate(it.link);
   }
 }

@@ -1,6 +1,5 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { inject } from '@angular/core';
 
 // 24×24 stroke icons (lucide-style geometry), inlined to avoid an icon dependency.
 const PATHS: Record<string, string> = {
@@ -36,7 +35,6 @@ const PATHS: Record<string, string> = {
   rewind: '<path d="M11 18 3 12l8-6v12zM21 18l-8-6 8-6v12z"/>',
   filter: '<path d="M3 5h18l-7 8.5V19l-4 2v-7.5L3 5z"/>',
   zap: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/>',
-  command: '<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6z"/>',
 };
 
 @Component({

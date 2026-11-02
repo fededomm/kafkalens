@@ -1,7 +1,6 @@
-import { Component, computed, effect, ElementRef, inject, input, signal, untracked, viewChild } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, computed, inject, input, resource, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { Api, Favorites, Toasts, TopicDetail } from '../../api';
+import { Api, Confirm, Favorites, Toasts, TopicDetail } from '../../api';
 import { download, NumPipe } from '../../fmt';
 import { Icon } from '../../icon';
 import { ConfigTable } from '../config-table';
@@ -14,7 +13,7 @@ type Tab = 'messages' | 'partitions' | 'configs' | 'consumers';
 
 @Component({
   selector: 'app-topic',
-  imports: [FormsModule, RouterLink, NumPipe, Icon, ConfigTable, TopicMessages, TopicPartitions, TopicConsumers, ProduceDialog],
+  imports: [RouterLink, NumPipe, Icon, ConfigTable, TopicMessages, TopicPartitions, TopicConsumers, ProduceDialog],
   templateUrl: './topic.html',
   styleUrl: './topic.css',
 })
@@ -24,41 +23,23 @@ export class TopicPage {
   private readonly api = inject(Api);
   protected readonly fav = inject(Favorites);
   private readonly toasts = inject(Toasts);
+  private readonly confirm = inject(Confirm);
   private readonly router = inject(Router);
-  private readonly deleteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('deleteDlg');
   protected readonly messages = viewChild(TopicMessages);
 
   protected readonly tab = signal<Tab>('messages');
-  protected readonly detail = signal<TopicDetail | null>(null);
-  protected readonly error = signal<string | null>(null);
+  protected readonly busy = signal(false);
+  protected readonly base = computed(() => `/c/${this.id()}/topics/${Api.seg(this.topic())}`);
+  protected readonly res = resource({ params: () => this.base(), loader: ({ params }) => this.api.get<TopicDetail>(params) });
+  protected readonly detail = computed(() => (this.res.hasValue() ? this.res.value() : null));
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
   protected readonly totalMessages = computed(() => (this.detail()?.partitions ?? []).reduce((s, p) => s + (p.end - p.start), 0));
   protected readonly replication = computed(() => this.detail()?.partitions[0]?.replicas.length ?? 0);
-  protected readonly base = computed(() => `/c/${this.id()}/topics/${Api.seg(this.topic())}`);
-
-  protected confirmText = '';
-
-  constructor() {
-    effect(() => {
-      this.base();
-      untracked(() => {
-        this.detail.set(null);
-        this.loadDetail();
-      });
-    });
-  }
-
-  async loadDetail() {
-    try {
-      this.detail.set(await this.api.get<TopicDetail>(this.base()));
-      this.error.set(null);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : String(e));
-    }
-  }
+  // brokers refuse DeleteRecords unless cleanup.policy includes delete
+  protected readonly compactOnly = computed(() => !(this.detail()?.configs.find((c) => c.key === 'cleanup.policy')?.value ?? 'delete').includes('delete'));
 
   onProduced() {
-    this.loadDetail();
+    this.res.reload();
     this.messages()?.refresh();
   }
 
@@ -67,32 +48,39 @@ export class TopicPage {
     const d = this.detail();
     if (!d) return;
     const configs = Object.fromEntries(d.configs.filter((c) => c.source === 'DYNAMIC_TOPIC_CONFIG' && !c.sensitive).map((c) => [c.key, c.value]));
-    download(`${this.topic()}-export.json`, JSON.stringify({ name: d.name, partitions: d.partitions.length, replicationFactor: this.replication(), configs }, null, 2));
+    const json = JSON.stringify({ name: d.name, partitions: d.partitions.length, replicationFactor: this.replication(), configs }, null, 2);
+    return this.toasts.guard(async () => {
+      const p = await download(`${this.topic()}-export.json`, json);
+      if (p) this.toasts.ok(`Saved to ${p}`);
+    });
   }
 
-  async setConfig(c: { key: string; value: string | null }) {
-    try {
+  setConfig(c: { key: string; value: string | null }) {
+    return this.toasts.guard(async () => {
       await this.api.put(`${this.base()}/configs`, { [c.key]: c.value });
       this.toasts.ok(c.value == null ? `${c.key} reset to default` : `${c.key} updated`);
-      this.loadDetail();
-    } catch (e) {
-      this.toasts.err(e);
-    }
+      this.res.reload();
+    });
   }
 
-  askDelete() {
-    this.confirmText = '';
-    this.deleteDlg().nativeElement.showModal();
+  async truncate() {
+    const t = this.topic();
+    const text = `This permanently deletes all ${this.totalMessages().toLocaleString()} messages of "${t}". The topic, its partitions and configuration stay.`;
+    if (!(await this.confirm.ask('Delete messages', text, 'Delete messages', t))) return;
+    return this.toasts.guard(async () => {
+      await this.api.del(`${this.base()}/records`);
+      this.toasts.ok(`Deleted the messages of ${t}`);
+      this.onProduced(); // reload counts and the messages tab
+    }, this.busy);
   }
 
   async deleteTopic() {
-    try {
+    const t = this.topic();
+    if (!(await this.confirm.ask('Delete topic', `This permanently deletes "${t}" and all of its messages.`, 'Delete topic', t))) return;
+    return this.toasts.guard(async () => {
       await this.api.del(this.base());
-      this.deleteDlg().nativeElement.close();
-      this.toasts.ok(`Deleted ${this.topic()}`);
+      this.toasts.ok(`Deleted ${t}`);
       this.router.navigate(['/c', this.id(), 'topics']);
-    } catch (e) {
-      this.toasts.err(e);
-    }
+    }, this.busy);
   }
 }

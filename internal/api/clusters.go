@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -13,84 +12,68 @@ import (
 	"kafkalens/internal/store"
 )
 
-func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
+func (a *API) listClusters(r *http.Request, _ cctx) (any, error) {
 	out := []map[string]any{}
 	for _, c := range a.store.List() {
 		out = append(out, c.Public())
 	}
-	reply(w, out, nil)
+	return out, nil
 }
 
-func validCluster(c store.Cluster) error {
+// prepare restores the stored secrets the browser never sees (see store.WithSecrets) and validates the cluster.
+func (a *API) prepare(c store.Cluster) (store.Cluster, error) {
+	if c.ID != "" {
+		stored, ok := a.store.Get(c.ID)
+		if !ok {
+			return c, httpErr{http.StatusNotFound, "cluster not found"}
+		}
+		var err error
+		if c, err = store.WithSecrets(c, stored); err != nil {
+			return c, bad("%v", err)
+		}
+	}
 	if c.Name == "" || len(c.Brokers) == 0 {
-		return bad("name and at least one broker are required")
+		return c, bad("name and at least one broker are required")
 	}
 	if _, err := kafka.ClientOpts(c); err != nil {
-		return bad("%v", err)
+		return c, bad("%v", err)
 	}
-	return nil
+	return c, nil
 }
 
-// merge restores the stored secrets the browser never sees (see store.WithSecrets).
-func (a *API) merge(c store.Cluster) (store.Cluster, error) {
-	if c.ID == "" {
-		return c, nil
-	}
-	stored, ok := a.store.Get(c.ID)
-	if !ok {
-		return c, httpErr{http.StatusNotFound, "cluster not found"}
-	}
-	c, err := store.WithSecrets(c, stored)
-	if errors.Is(err, store.ErrPasswordNeeded) {
-		err = bad("%v", err)
-	}
-	return c, err
-}
-
-func (a *API) saveCluster(w http.ResponseWriter, r *http.Request) {
+func (a *API) saveCluster(r *http.Request, _ cctx) (any, error) {
 	var c store.Cluster
 	if err := decode(r, &c); err != nil {
-		reply(w, nil, err)
-		return
+		return nil, err
 	}
 	c.ID = r.PathValue("id")
-	c, err := a.merge(c)
-	if err == nil {
-		err = validCluster(c)
-	}
+	c, err := a.prepare(c)
 	if err != nil {
-		reply(w, nil, err)
-		return
+		return nil, err
 	}
 	saved, err := a.store.Save(c)
 	a.pool.Drop(saved.ID)
-	reply(w, saved.Public(), err)
+	return saved.Public(), err
 }
 
-func (a *API) deleteCluster(w http.ResponseWriter, r *http.Request) {
+func (a *API) deleteCluster(r *http.Request, _ cctx) (any, error) {
 	a.pool.Drop(r.PathValue("id"))
-	reply(w, nil, a.store.Delete(r.PathValue("id")))
+	return nil, a.store.Delete(r.PathValue("id"))
 }
 
-func (a *API) testCluster(w http.ResponseWriter, r *http.Request) {
+func (a *API) testCluster(r *http.Request, _ cctx) (any, error) {
 	var c store.Cluster
 	if err := decode(r, &c); err != nil {
-		reply(w, nil, err)
-		return
+		return nil, err
 	}
-	c, err := a.merge(c)
-	if err == nil {
-		err = validCluster(c)
-	}
+	c, err := a.prepare(c)
 	if err != nil {
-		reply(w, nil, err)
-		return
+		return nil, err
 	}
 	opts, _ := kafka.ClientOpts(c)
 	cl, err := kgo.NewClient(opts...)
 	if err != nil {
-		reply(w, nil, bad("%v", err))
-		return
+		return nil, bad("%v", err)
 	}
 	defer cl.Close()
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -98,8 +81,7 @@ func (a *API) testCluster(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	m, err := kadm.NewClient(cl).BrokerMetadata(ctx)
 	if err != nil {
-		reply(w, nil, err)
-		return
+		return nil, err
 	}
-	reply(w, map[string]any{"clusterId": m.Cluster, "brokers": len(m.Brokers), "latencyMs": time.Since(start).Milliseconds()}, nil)
+	return map[string]any{"clusterId": m.Cluster, "brokers": len(m.Brokers), "latencyMs": time.Since(start).Milliseconds()}, nil
 }

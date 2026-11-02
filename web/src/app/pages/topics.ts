@@ -1,9 +1,10 @@
-import { ChangeDetectorRef, Component, computed, effect, ElementRef, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, linkedSignal, resource, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Api, Favorites, Folders, Toasts, TopicRow } from '../api';
+import { Api, Confirm, Favorites, Folders, Toasts, TopicRow } from '../api';
 import { NumPipe } from '../fmt';
 import { Icon } from '../icon';
+import { CreateTopicDialog } from './create-topic-dialog';
 
 type SortKey = 'name' | 'partitions' | 'replicationFactor' | 'messages';
 
@@ -12,7 +13,7 @@ const PAGE = 200;
 
 @Component({
   selector: 'app-topics',
-  imports: [FormsModule, RouterLink, NumPipe, Icon],
+  imports: [FormsModule, RouterLink, NumPipe, Icon, CreateTopicDialog],
   template: `
 <div class="page">
   <header class="page-head">
@@ -21,10 +22,10 @@ const PAGE = 200;
       <p class="sub">{{ visible().length | num }} of {{ (topics() ?? []).length | num }} topics</p>
     </div>
     <div class="row">
-      <button class="btn" (click)="load()" [disabled]="loading()" aria-label="Refresh">
-        @if (loading()) { <span class="spin"></span> } @else { <app-icon name="refresh" /> }
+      <button class="btn" (click)="res.reload()" [disabled]="res.isLoading()" aria-label="Refresh">
+        @if (res.isLoading()) { <span class="spin"></span> } @else { <app-icon name="refresh" /> }
       </button>
-      <button class="btn primary" (click)="openCreate()" [disabled]="readOnly()"><app-icon name="plus" /> Create topic</button>
+      <button class="btn primary" (click)="create.open()" [disabled]="readOnly()"><app-icon name="plus" /> Create topic</button>
     </div>
   </header>
 
@@ -32,12 +33,12 @@ const PAGE = 200;
     <div class="card-head">
       <div class="search grow">
         <app-icon name="search" />
-        <input class="input" placeholder="Filter topics…  (regex allowed)" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Filter topics" />
+        <input class="input" placeholder="Filter topics…  (regex allowed)" [(ngModel)]="q" aria-label="Filter topics" />
       </div>
       <div class="row toggles">
         <div class="row">
           @if (folderNames().length) {
-            <select class="input folder-sel" [ngModel]="folder()" (ngModelChange)="folder.set($event)" aria-label="Folder">
+            <select class="input folder-sel" [(ngModel)]="folder" aria-label="Folder">
               <option value="">All folders</option>
               @for (f of folderNames(); track f) { <option [value]="f">{{ f }}</option> }
             </select>
@@ -47,22 +48,22 @@ const PAGE = 200;
           }
           <button class="btn ghost sm" (click)="openPrefixFolder()"><app-icon name="folder" /> New folder</button>
         </div>
-        <label class="check"><input type="checkbox" [ngModel]="favOnly()" (ngModelChange)="favOnly.set($event)" /> Favorites only</label>
-        <label class="check"><input type="checkbox" [ngModel]="showInternal()" (ngModelChange)="showInternal.set($event)" /> Show internal</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="favOnly" /> Favorites only</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="showInternal" /> Show internal</label>
       </div>
     </div>
 
-    @if (error(); as e) { <div class="alert err m"><app-icon name="alert" /> {{ e }}</div> }
+    @if (res.error(); as e) { <div class="alert err m"><app-icon name="alert" /> {{ e.message }}</div> }
 
     <div class="table-wrap">
       <table class="t">
         <thead>
           <tr>
             <th class="fav"></th>
-            <th class="sortable" (click)="sortBy('name')">Name<span class="arrow">{{ arrow('name') }}</span></th>
-            <th class="sortable num" (click)="sortBy('partitions')">Partitions<span class="arrow">{{ arrow('partitions') }}</span></th>
-            <th class="sortable num" (click)="sortBy('replicationFactor')">Replicas<span class="arrow">{{ arrow('replicationFactor') }}</span></th>
-            <th class="sortable num" (click)="sortBy('messages')">Messages<span class="arrow">{{ arrow('messages') }}</span></th>
+            <th class="sortable" [attr.aria-sort]="ariaSort('name')"><button type="button" (click)="sortBy('name')">Name<span class="arrow">{{ arrow('name') }}</span></button></th>
+            <th class="sortable num" [attr.aria-sort]="ariaSort('partitions')"><button type="button" (click)="sortBy('partitions')">Partitions<span class="arrow">{{ arrow('partitions') }}</span></button></th>
+            <th class="sortable num" [attr.aria-sort]="ariaSort('replicationFactor')"><button type="button" (click)="sortBy('replicationFactor')">Replicas<span class="arrow">{{ arrow('replicationFactor') }}</span></button></th>
+            <th class="sortable num" [attr.aria-sort]="ariaSort('messages')"><button type="button" (click)="sortBy('messages')">Messages<span class="arrow">{{ arrow('messages') }}</span></button></th>
             <th>Health</th>
             <th></th>
           </tr>
@@ -94,7 +95,7 @@ const PAGE = 200;
               </td>
             </tr>
           } @empty {
-            @if (loading() && !topics()) {
+            @if (res.isLoading() && !topics()) {
               @for (i of [1, 2, 3, 4, 5]; track i) { <tr><td colspan="7"><div class="skeleton"></div></td></tr> }
             } @else {
               <tr><td colspan="7"><div class="empty"><app-icon name="inbox" /><strong>No topics</strong><span>Nothing matches the current filter.</span></div></td></tr>
@@ -113,49 +114,7 @@ const PAGE = 200;
   </section>
 </div>
 
-<dialog #createDlg class="dlg">
-  <form (ngSubmit)="create()" #f="ngForm">
-    <div class="dlg-head">
-      <div><h2>Create topic</h2><p>Leave partitions / replicas empty to use broker defaults.</p></div>
-      <button type="button" class="btn ghost icon sm" (click)="createDlg.close()" aria-label="Close"><app-icon name="x" /></button>
-    </div>
-    <div class="dlg-body form-grid">
-      <div class="field full">
-        <span class="row">Configuration
-          <span class="spacer"></span>
-          <label class="btn ghost sm"><app-icon name="download" /> Import JSON<input type="file" accept=".json,application/json" hidden (change)="importConfig($event)" /></label>
-        </span>
-        @if (configKeys().length) {
-          <span class="hint row">{{ configKeys().length }} imported: <span class="mono">{{ configKeys().join(', ') }}</span>
-            <button type="button" class="btn ghost sm" (click)="nt.configs = {}">Clear</button></span>
-        } @else {
-          <span class="hint">Optional: prefill from a topic's exported config</span>
-        }
-      </div>
-      <label class="field full"><span>Name</span>
-        <input class="input mono" name="name" required pattern="[a-zA-Z0-9._-]+" [(ngModel)]="nt.name" autofocus placeholder="orders.v1" />
-        <span class="hint">Letters, digits, dot, underscore, dash</span>
-      </label>
-      <label class="field"><span>Partitions</span><input class="input" type="number" min="1" name="p" [(ngModel)]="nt.partitions" /></label>
-      <label class="field"><span>Replication factor</span><input class="input" type="number" min="1" name="rf" [(ngModel)]="nt.replicationFactor" /></label>
-      <label class="field"><span>Cleanup policy</span>
-        <select class="input" name="cp" [(ngModel)]="nt.cleanup">
-          <option value="">{{ nt.configs['cleanup.policy'] ? 'Imported (' + nt.configs['cleanup.policy'] + ')' : 'Default' }}</option><option value="delete">delete</option><option value="compact">compact</option><option value="compact,delete">compact,delete</option>
-        </select>
-      </label>
-      <label class="field"><span>Retention</span>
-        <select class="input" name="ret" [(ngModel)]="nt.retention">
-          <option value="">{{ nt.configs['retention.ms'] ? 'Imported (' + nt.configs['retention.ms'] + ' ms)' : 'Default' }}</option><option value="3600000">1 hour</option><option value="86400000">1 day</option>
-          <option value="604800000">7 days</option><option value="2592000000">30 days</option><option value="-1">Forever</option>
-        </select>
-      </label>
-    </div>
-    <div class="dlg-foot">
-      <button type="button" class="btn ghost" (click)="createDlg.close()">Cancel</button>
-      <button class="btn primary" [disabled]="!f.valid || busy()">@if (busy()) { <span class="spin"></span> } Create</button>
-    </div>
-  </form>
-</dialog>
+<app-create-topic-dialog #create [id]="id()" (created)="res.reload()" />
 
 <dialog #folderDlg class="dlg">
   <div class="dlg-head">
@@ -166,7 +125,7 @@ const PAGE = 200;
     @for (f of folderNames(); track f) {
       @let rule = folders.rule(id(), f, folderTopic());
       <label class="check" [title]="rule ? 'Every topic starting with ' + rule.slice(0, -1) + ' is in this folder' : ''">
-        <input type="checkbox" [ngModel]="folders.has(id(), f, folderTopic())" (ngModelChange)="folders.put(id(), f, folderTopic(), $event)" [disabled]="!!rule" />
+        <input type="checkbox" [ngModel]="folders.has(id(), f, folderTopic())" (ngModelChange)="folders.put(id(), f, [folderTopic()], $event)" [disabled]="!!rule" />
         {{ f }} @if (rule) { <span class="mono dim">{{ rule }}</span> }
       </label>
     }
@@ -180,42 +139,42 @@ const PAGE = 200;
 <dialog #prefixDlg class="dlg">
   <form (ngSubmit)="createPrefixFolder()" #pf="ngForm">
     <div class="dlg-head">
-      <div><h2>New folder</h2><p>Holds every topic whose name starts with the prefix, including topics created later.</p></div>
+      <div><h2>New folder</h2><p>Holds every topic starting with the prefix, including topics created later, or just the ones you choose.</p></div>
       <button type="button" class="btn ghost icon sm" (click)="prefixDlg.close()" aria-label="Close"><app-icon name="x" /></button>
     </div>
     <div class="dlg-body">
       <label class="field"><span>Topics starting with</span>
-        <input class="input mono" name="prefix" required pattern="[a-zA-Z0-9._-]+" [ngModel]="prefix()" (ngModelChange)="prefix.set($event)" autofocus autocomplete="off" placeholder="orders." />
-        <span class="hint">{{ prefixMatches() | num }} topics match now, ignoring case</span>
+        <input class="input mono" name="prefix" pattern="[a-zA-Z0-9._-]+" [(ngModel)]="prefix" autofocus autocomplete="off" placeholder="orders." />
+        <span class="hint">{{ prefixMatches() | num }} topics match now, ignoring case. Choosing topics below saves only those.</span>
       </label>
+      <div class="field"><span>Topics</span>
+        <details class="pick">
+          <summary class="input">{{ chosen().length ? (chosen().length | num) + ' selected' : 'Choose topics…' }} <app-icon name="chevron" class="dim" /></summary>
+          <div class="pick-list">
+            <input class="input" [(ngModel)]="pickQ" [ngModelOptions]="{ standalone: true }" (keydown.enter)="$event.preventDefault()"
+              placeholder="Filter…" aria-label="Filter topics to add" autocomplete="off" />
+            @if (matching().length) {
+              <label class="check all"><input type="checkbox" [checked]="allPicked()" (change)="pickAll($any($event.target).checked)" /> Select all ({{ matching().length | num }})</label>
+            }
+            @for (t of pickable(); track t) {
+              <label class="check"><input type="checkbox" [checked]="picked().has(t)" (change)="togglePick(t)" /> <span class="mono">{{ t }}</span></label>
+            } @empty { <span class="hint">No topics match</span> }
+            @if (matching().length > PAGE) { <span class="hint">First {{ PAGE }} shown, filter to find more</span> }
+          </div>
+        </details>
+      </div>
       <label class="field"><span>Name</span>
         <input class="input" name="name" [(ngModel)]="prefixName" autocomplete="off" [placeholder]="prefix() || 'orders'" />
-        <span class="hint">Defaults to the prefix. An existing name adds the rule to that folder.</span>
+        <span class="hint">Defaults to the prefix. An existing name adds to that folder.</span>
       </label>
     </div>
     <div class="dlg-foot">
       <button type="button" class="btn ghost" (click)="prefixDlg.close()">Cancel</button>
-      <button class="btn primary" [disabled]="!pf.valid">Create</button>
+      <button class="btn primary" [disabled]="!pf.valid || !(prefix().trim() || (chosen().length && prefixName.trim()))">Create</button>
     </div>
   </form>
 </dialog>
 
-<dialog #deleteDlg class="dlg">
-  <form (ngSubmit)="confirmDelete()">
-    <div class="dlg-head">
-      <div><h2>Delete topic</h2><p>This permanently deletes <b class="mono">{{ toDelete()?.name }}</b> and all of its messages.</p></div>
-    </div>
-    <div class="dlg-body">
-      <label class="field"><span>Type the topic name to confirm</span>
-        <input class="input mono" name="confirm" [(ngModel)]="confirmText" autocomplete="off" />
-      </label>
-    </div>
-    <div class="dlg-foot">
-      <button type="button" class="btn ghost" (click)="deleteDlg.close()">Cancel</button>
-      <button class="btn danger solid" [disabled]="confirmText !== toDelete()?.name || busy()">Delete topic</button>
-    </div>
-  </form>
-</dialog>
 `,
   styles: `
 .grow { flex: 1; max-width: 420px; }
@@ -224,11 +183,14 @@ const PAGE = 200;
 td.fav { padding-right: 0; }
 .healthy { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
 .healthy .dot { color: var(--ok); }
-.m { margin: 12px 14px; }
 .more td { text-align: center; padding: 10px; }
 .toggles { gap: 18px; }
 .folder-sel { width: auto; max-width: 200px; }
 tr .row-act.on { opacity: 1; color: var(--accent); }
+.pick summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.pick summary::-webkit-details-marker { display: none; }
+.pick-list { margin-top: 6px; padding: 8px; display: grid; gap: 6px; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pick-list .all { padding-bottom: 6px; border-bottom: 1px solid var(--border); font-weight: 500; }
 `,
 })
 export class TopicsPage {
@@ -237,17 +199,13 @@ export class TopicsPage {
   protected readonly fav = inject(Favorites);
   protected readonly folders = inject(Folders);
   private readonly toasts = inject(Toasts);
+  private readonly confirm = inject(Confirm);
   private readonly router = inject(Router);
-  private readonly cdr = inject(ChangeDetectorRef);
-  private readonly createDlg = viewChild.required<ElementRef<HTMLDialogElement>>('createDlg');
-  private readonly deleteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('deleteDlg');
   private readonly folderDlg = viewChild.required<ElementRef<HTMLDialogElement>>('folderDlg');
   private readonly prefixDlg = viewChild.required<ElementRef<HTMLDialogElement>>('prefixDlg');
 
-  protected readonly topics = signal<TopicRow[] | null>(null);
-  protected readonly loading = signal(false);
-  protected readonly busy = signal(false);
-  protected readonly error = signal<string | null>(null);
+  protected readonly res = resource({ params: () => this.id(), loader: ({ params }) => this.api.get<TopicRow[]>(`/c/${params}/topics`) });
+  protected readonly topics = computed(() => (this.res.hasValue() ? this.res.value() : null));
   protected readonly q = signal('');
   protected readonly showInternal = signal(false);
   protected readonly favOnly = signal(false);
@@ -266,6 +224,19 @@ export class TopicsPage {
     const p = this.prefix().trim();
     return p ? (this.topics() ?? []).filter((t) => Folders.startsWith(t.name, p)).length : 0;
   });
+  protected readonly picked = signal(new Set<string>());
+  protected readonly pickQ = signal('');
+  // checked topics still under the prefix: editing it after picking drops the ones it no longer covers
+  protected readonly chosen = computed(() => [...this.picked()].filter((t) => Folders.startsWith(t, this.prefix().trim())));
+  protected readonly matching = computed(() => {
+    const p = this.prefix().trim();
+    const q = this.pickQ().trim().toLowerCase();
+    return (this.topics() ?? [])
+      .filter((t) => (this.showInternal() || !t.internal) && Folders.startsWith(t.name, p) && t.name.toLowerCase().includes(q))
+      .map((t) => t.name).sort((a, b) => a.localeCompare(b));
+  });
+  protected readonly pickable = computed(() => this.matching().slice(0, PAGE));
+  protected readonly allPicked = computed(() => this.matching().every((t) => this.picked().has(t)));
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
 
   protected readonly visible = computed(() => {
@@ -282,31 +253,10 @@ export class TopicsPage {
       .sort((a, b) => Number(fav(b)) - Number(fav(a)) || (a[key] < b[key] ? -dir : a[key] > b[key] ? dir : 0));
   });
 
-  // back to the first page whenever the filtered/sorted list changes
-  protected readonly limit = linkedSignal(() => (this.visible(), PAGE));
+  // back to the first page when the filters or the order change, not on a star or folder edit
+  protected readonly limit = linkedSignal(() => (this.id(), this.q(), this.folder(), this.favOnly(), this.showInternal(), this.sort(), PAGE));
   protected readonly shown = computed(() => this.visible().slice(0, this.limit()));
   protected readonly PAGE = PAGE;
-
-  protected nt = this.emptyNt();
-  protected configKeys = () => Object.keys(this.nt.configs);
-  protected readonly toDelete = signal<TopicRow | null>(null);
-  protected confirmText = '';
-
-  constructor() {
-    effect(() => { this.id(); this.topics.set(null); this.load(); });
-  }
-
-  async load() {
-    this.loading.set(true);
-    try {
-      this.topics.set(await this.api.get<TopicRow[]>(`/c/${this.id()}/topics`));
-      this.error.set(null);
-    } catch (e) {
-      this.error.set(e instanceof Error ? e.message : String(e));
-    } finally {
-      this.loading.set(false);
-    }
-  }
 
   sortBy(key: SortKey) {
     this.sort.update((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : key === 'name' ? 1 : -1 }));
@@ -314,6 +264,10 @@ export class TopicsPage {
   arrow(key: SortKey) {
     const s = this.sort();
     return s.key === key ? (s.dir === 1 ? '↑' : '↓') : '';
+  }
+  ariaSort(key: SortKey) {
+    const s = this.sort();
+    return s.key === key ? (s.dir === 1 ? 'ascending' : 'descending') : null;
   }
 
   open(t: TopicRow) { this.router.navigate(['/c', this.id(), 'topics', t.name]); }
@@ -329,7 +283,7 @@ export class TopicsPage {
   addFolder() {
     const name = this.newFolder.trim();
     if (!name) return;
-    this.folders.put(this.id(), name, this.folderTopic(), true);
+    this.folders.put(this.id(), name, [this.folderTopic()], true);
     this.newFolder = '';
   }
 
@@ -337,90 +291,43 @@ export class TopicsPage {
     const q = this.q().trim();
     this.prefix.set(/^[\w.-]+$/.test(q) ? q : ''); // start from the search box when it holds a plain name
     this.prefixName = '';
+    this.picked.set(new Set());
+    this.pickQ.set('');
     this.prefixDlg().nativeElement.showModal();
+  }
+
+  /** Checks or unchecks every topic matching the filters, beyond the ones shown. */
+  pickAll(on: boolean) {
+    this.picked.update((s) => { const n = new Set(s); for (const t of this.matching()) if (on) n.add(t); else n.delete(t); return n; });
+  }
+
+  togglePick(t: string) {
+    this.picked.update((s) => { const n = new Set(s); if (!n.delete(t)) n.add(t); return n; });
   }
 
   createPrefixFolder() {
     const p = this.prefix().trim();
-    if (!p) return;
     const name = this.prefixName.trim() || p;
-    this.folders.put(this.id(), name, p + '*', true);
+    const chosen = this.chosen();
+    if (!name || !(p || chosen.length)) return;
+    // the prefix only narrows the list once topics are chosen
+    this.folders.put(this.id(), name, chosen.length ? chosen : [p + '*'], true);
     this.folder.set(name);
     this.prefixDlg().nativeElement.close();
   }
 
-  dropFolder() {
+  async dropFolder() {
     const f = this.folder();
-    if (confirm(`Delete the folder "${f}"? Its topics are not touched.`)) this.folders.remove(this.id(), f);
+    if (await this.confirm.ask('Delete folder', `Delete the folder "${f}"? Its topics are not touched.`, 'Delete folder')) this.folders.remove(this.id(), f);
   }
 
-  private emptyNt() {
-    return { name: '', partitions: null as number | null, replicationFactor: null as number | null, cleanup: '', retention: '', configs: {} as Record<string, string> };
-  }
-
-  openCreate() {
-    this.nt = this.emptyNt();
-    this.createDlg().nativeElement.showModal();
-  }
-
-  /** Prefills the dialog from a file written by the topic page's Export config. Name is left as typed. */
-  async importConfig(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = ''; // allow re-importing the same file
-    if (!file) return;
-    try {
-      const j = JSON.parse(await file.text());
-      if (!j || typeof j !== 'object' || (j.configs != null && typeof j.configs !== 'object')) throw new Error('not a topic export');
-      const configs: Record<string, string> = {};
-      for (const [k, v] of Object.entries(j.configs ?? {})) if (v != null) configs[k] = String(v);
-      const n = (x: unknown) => (Number.isInteger(x) && (x as number) > 0 ? (x as number) : null);
-      this.nt = { ...this.nt, partitions: n(j.partitions), replicationFactor: n(j.replicationFactor), cleanup: '', retention: '', configs };
-      this.cdr.markForCheck(); // zoneless: nt is a plain field set after an await, nothing else re-renders the dialog
-      this.toasts.ok(`Imported ${Object.keys(configs).length} configs from ${file.name}`);
-    } catch (err) {
-      this.toasts.err(`${file.name}: ${err instanceof Error ? err.message : err}`);
-    }
-  }
-
-  async create() {
-    const configs: Record<string, string> = { ...this.nt.configs };
-    if (this.nt.cleanup) configs['cleanup.policy'] = this.nt.cleanup;
-    if (this.nt.retention) configs['retention.ms'] = this.nt.retention;
-    this.busy.set(true);
-    try {
-      await this.api.post(`/c/${this.id()}/topics`, {
-        name: this.nt.name, partitions: this.nt.partitions ?? 0, replicationFactor: this.nt.replicationFactor ?? 0, configs,
-      });
-      this.createDlg().nativeElement.close();
-      this.toasts.ok(`Created ${this.nt.name}`);
-      this.load();
-    } catch (e) {
-      this.toasts.err(e);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  askDelete(t: TopicRow) {
-    this.toDelete.set(t);
-    this.confirmText = '';
-    this.deleteDlg().nativeElement.showModal();
-  }
-
-  async confirmDelete() {
-    const t = this.toDelete();
-    if (!t || this.confirmText !== t.name) return;
-    this.busy.set(true);
-    try {
+  async askDelete(t: TopicRow) {
+    if (!(await this.confirm.ask('Delete topic', `This permanently deletes ${t.name} and all of its messages.`, 'Delete topic', t.name))) return;
+    return this.toasts.guard(async () => {
       await this.api.del(`/c/${this.id()}/topics/${Api.seg(t.name)}`);
-      this.deleteDlg().nativeElement.close();
       this.toasts.ok(`Deleted ${t.name}`);
-      this.topics.update((l) => l?.filter((x) => x.name !== t.name) ?? null);
-    } catch (e) {
-      this.toasts.err(e);
-    } finally {
-      this.busy.set(false);
-    }
+      // not while another cluster loads: set() would cancel that load
+      if (this.res.hasValue()) this.res.value.update((l) => l?.filter((x) => x.name !== t.name));
+    });
   }
 }

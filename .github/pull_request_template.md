@@ -6,5 +6,6 @@
 
 <!-- Commands run, manual checks, screenshots for UI changes -->
 
+- [ ] `gofmt -l .` prints nothing
 - [ ] `go vet ./... && go test ./...` pass
-- [ ] `npx ng build` passes (in `web/`)
+- [ ] `npx ng build && npm test` pass (in `web/`)

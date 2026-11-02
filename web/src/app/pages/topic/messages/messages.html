@@ -52,7 +52,7 @@
     <span><span class="pulse sm"></span> {{ livePaused() ? 'Paused' : 'Listening for new messages' }} — {{ records().length | num }} received</span>
   } @else if (meta(); as m) {
     <span>{{ records().length | num }} shown · {{ m.scanned | num }} scanned · {{ m.ms }} ms</span>
-    @if (m.partial) { <span class="badge warn">partial — scan limit reached, narrow the range</span> }
+    @if (m.partial) { <span class="badge warn">partial — scan or time limit reached, narrow the range</span> }
   }
 </div>
 

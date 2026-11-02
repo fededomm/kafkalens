@@ -45,6 +45,8 @@ export class TopicMessages {
   private stopTail: (() => void) | null = null;
   private buffer: KRecord[] = [];
   private filterTimer?: ReturnType<typeof setTimeout>;
+  /** Bumped by every browse and live start: late answers of older requests are dropped. */
+  private seq = 0;
 
   constructor() {
     effect(() => {
@@ -53,6 +55,8 @@ export class TopicMessages {
         this.stopLive();
         this.records.set([]);
         this.selected.set(null);
+        this.meta.set(null);
+        this.patch({ partition: -1, offset: 0 }); // per-topic criteria; filter, limit and start position are kept
         this.browse();
       });
     });
@@ -81,27 +85,32 @@ export class TopicMessages {
   refresh() { if (!this.live()) this.browse(); }
 
   async browse() {
+    clearTimeout(this.filterTimer);
     this.stopLive();
+    const n = ++this.seq;
     const r = this.moreOpts() ? { ...this.req() } : { ...this.req(), ...TopicMessages.BROWSE_DEFAULTS };
     if (r.from === 'timestamp') r.timestamp = this.timeInput ? new Date(this.timeInput).getTime() : Date.now() - 3600_000;
     this.browsing.set(true);
     const t0 = performance.now();
     try {
       const res = await this.api.post<BrowseResp>(`${this.base()}/browse`, r);
+      if (n !== this.seq) return;
       // newest first reads better for "latest", chronological for the others
       const recs = r.from === 'latest' ? [...res.records].sort((a, b) => b.timestamp - a.timestamp || b.offset - a.offset) : res.records;
       this.records.set(recs);
       this.meta.set({ scanned: res.scanned, partial: res.partial, ms: Math.round(performance.now() - t0) });
       this.selected.set(recs[0] ?? null);
     } catch (e) {
-      this.toasts.err(e);
+      if (n === this.seq) this.toasts.err(e);
     } finally {
-      this.browsing.set(false);
+      if (n === this.seq) this.browsing.set(false);
     }
   }
 
   toggleLive() {
     if (this.live()) return this.stopLive();
+    const n = ++this.seq;
+    this.browsing.set(false);
     this.records.set([]);
     this.selected.set(null);
     this.meta.set(null);
@@ -109,15 +118,16 @@ export class TopicMessages {
     this.livePaused.set(false);
     let scheduled = false;
     const onRecords = (rs: KRecord[]) => {
-      this.buffer.push(...rs);
+      this.buffer = this.buffer.concat(rs.filter(this.matcher())).slice(-LIVE_CAP);
       // batch DOM updates to one per frame under high throughput
       if (scheduled || this.livePaused()) return;
       scheduled = true;
       requestAnimationFrame(() => { scheduled = false; this.flush(); });
     };
-    const onError = (msg: string) => { this.toasts.err(msg); this.stopLive(); };
+    // a failed stream ends live mode, so Live can be started again
+    const onError = (msg: string) => { if (n !== this.seq) return; this.toasts.err(msg); this.stopLive(); };
     this.api.tail(this.id(), this.topic(), onRecords, onError).then(
-      (stop) => { if (this.live()) this.stopTail = stop; else stop(); },
+      (stop) => { if (this.live() && n === this.seq) this.stopTail = stop; else stop(); },
       (e) => onError(String(e)),
     );
   }
@@ -160,6 +170,9 @@ export class TopicMessages {
   }
 
   exportJson() {
-    download(`${this.topic()}-${Date.now()}.json`, JSON.stringify(this.records(), null, 2));
+    download(`${this.topic()}-${Date.now()}.json`, JSON.stringify(this.records(), null, 2)).then(
+      (p) => p && this.toasts.ok(`Saved to ${p}`),
+      (e) => this.toasts.err(e),
+    );
   }
 }

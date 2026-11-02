@@ -3,6 +3,42 @@
 All notable changes to KafkaLens are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.6.0] - 2026-11-02
+
+### Added
+
+- **Pick topics for a folder.** **New folder** has a dropdown with a checkbox per topic, a filter and **Select all**. The prefix is now optional and narrows the list: when topics are chosen, only those are saved; with none chosen, the prefix rule is saved as before.
+- **Kafka errors are shown.** Browsing a topic you can't read (e.g. missing ACLs) reports the error instead of an empty result, and live tail stops with the message instead of staying silently "live". The Consumers tab of a topic shows when its groups could not be read.
+- **Delete all messages of a topic.** **Delete messages** on the topic page empties every partition up to now, after typing the topic name; the topic, its partitions and configuration stay. Disabled on read-only clusters, internal topics and compacted topics (Kafka refuses it when `cleanup.policy` has no `delete`).
+- **Binary headers.** Header values that are not UTF-8 travel as base64 (marked *base64*) instead of being corrupted, in the inspector, exports and **Re-send**.
+
+### Changed
+
+- **Confirmations in the app's look.** Deleting a folder, a consumer group or a connection asks in an app dialog instead of the browser's; deleting a topic uses the same dialog with the name to type. Navigating away cancels the question.
+- **Re-send copies binary records faithfully**: the original bytes are produced, not their base64 text.
+- **Lighter topic page and palette.** The topic page computes consumer lag only for that topic instead of every group of the cluster, and **Ctrl+K** loads only topic and group names.
+- **Exports in the desktop app** confirm the saved path and report write errors.
+- **Removing a connection** also forgets its favorites and folders.
+- The Brokers card in Overview scrolls to the brokers table; sortable columns and *Import JSON* work from the keyboard.
+
+### Fixed
+
+- **Consumer groups with `:` `/` `@` `=` `+` in the name**: details, delete and offset reset now act on the right group (reset used to create a new group with the encoded name).
+- **Offset reset**: *Time* without a date no longer resets to the earliest offset, negative offsets are refused, an offset below the log start is moved to it (consumers used to jump to the end), and changing topic resets the partition.
+- **Transactional topics**: reading up to the end no longer waits 15 s and reports *partial*.
+- **Produce dialog** shows the values it is about to send when reopened or used for Re-send.
+- Pages no longer show data of the previous cluster, topic or group when a slow answer arrives after switching; the same for the messages filter while typing.
+- Live tail: no runaway memory while paused or in a background tab, and quick Live/Stop toggles no longer leave a stream open.
+- Double clicks no longer save a connection twice or send a message twice; Add partitions is disabled while running.
+- Clearing the client certificate of a saved connection works; saving a config value without changes no longer sends an empty value; the broker config dialog no longer spins forever on error; *Test connection* results no longer appear in the next connection's dialog; the topic list keeps its length after starring a topic; the Consumers tab and the group list show group states and errors like the rest of the app.
+- `clusters.json` is synced to disk before replacing the old file, and a failed save no longer changes the connections in memory.
+
+### Security
+
+- **Browser mode** only answers requests whose `Host` is `localhost` or a loopback IP and blocks cross-origin changes, so other web pages can't reach the API through DNS rebinding or cross-site POSTs. LAN access is not supported.
+
 ## [0.5.0] - 2026-11-02
 
 ### Added
@@ -61,6 +97,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.6.0]: https://github.com/fededomm/kafkalens/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fededomm/kafkalens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fededomm/kafkalens/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/fededomm/kafkalens/compare/v0.3.0...v0.3.1

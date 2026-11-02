@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, input, output, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, Partition, Toasts } from '../../../api';
 import { NumPipe } from '../../../fmt';
@@ -47,7 +47,7 @@ import { Icon } from '../../../icon';
     </div>
     <div class="dlg-foot">
       <button type="button" class="btn ghost" (click)="dlg.close()">Cancel</button>
-      <button class="btn primary" [disabled]="newPartitions <= (partitions().length)">Update</button>
+      <button class="btn primary" [disabled]="newPartitions <= partitions().length || busy()">Update</button>
     </div>
   </form>
 </dialog>
@@ -64,6 +64,7 @@ export class TopicPartitions {
   private readonly toasts = inject(Toasts);
   private readonly dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
 
+  protected readonly busy = signal(false);
   protected newPartitions = 0;
 
   openParts() {
@@ -71,14 +72,12 @@ export class TopicPartitions {
     this.dlg().nativeElement.showModal();
   }
 
-  async addPartitions() {
-    try {
+  addPartitions() {
+    return this.toasts.guard(async () => {
       await this.api.post(`${this.base()}/partitions`, { total: this.newPartitions });
       this.dlg().nativeElement.close();
       this.toasts.ok(`Topic now has ${this.newPartitions} partitions`);
       this.changed.emit();
-    } catch (e) {
-      this.toasts.err(e);
-    }
+    }, this.busy);
   }
 }

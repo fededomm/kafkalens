@@ -26,14 +26,17 @@ Layout: `internal/api` (REST routes on chi, one file per area), `internal/kafka`
 CI runs these on every pull request; run them before pushing:
 
 ```sh
-cd web && npx ng build && cd ..
-go vet ./... && go test ./...   # TestBrowse runs against localhost:9092 when `make kafka` is up
+cd web && npx ng build && npm test && cd ..
+gofmt -l .                      # must print nothing
+go vet ./... && GOOS=windows go vet -tags desktop ./...
+go test ./...                   # TestBrowse runs against localhost:9092 when `make kafka` is up
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
 ## Pull requests
 
 - Keep each PR focused on one change; explain the why in the description.
-- Match the style around your change; `gofmt` for Go, Prettier settings in `web/.prettierrc` for the UI.
+- Match the style around your change; `gofmt` for Go, `web/.editorconfig` for the UI.
 - Add or update a test when you change behaviour.
 - Never commit credentials: `clusters.json`, PEM keys and `.env` files are git-ignored for a reason.
 

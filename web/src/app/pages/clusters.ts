@@ -1,7 +1,7 @@
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Api, Cluster, Toasts } from '../api';
+import { Api, Cluster, Confirm, Favorites, Folders, Toasts } from '../api';
 import { Icon } from '../icon';
 
 const COLORS = ['#2dd4bf', '#60a5fa', '#a78bfa', '#f472b6', '#fb923c', '#facc15', '#4ade80', '#f87171'];
@@ -58,7 +58,7 @@ const blank = (): Cluster => ({
   }
 </div>
 
-<dialog #dlg class="dlg" (close)="testResult.set(null)">
+<dialog #dlg class="dlg">
   <form (ngSubmit)="save()" #f="ngForm">
     <div class="dlg-head">
       <div>
@@ -141,7 +141,7 @@ const blank = (): Cluster => ({
       </button>
       <span class="spacer"></span>
       <button type="button" class="btn ghost" (click)="dlg.close()">Cancel</button>
-      <button class="btn primary" [disabled]="!f.valid">Save</button>
+      <button class="btn primary" [disabled]="!f.valid || saving()">Save</button>
     </div>
   </form>
 </dialog>
@@ -168,6 +168,9 @@ const blank = (): Cluster => ({
 export class ClustersPage {
   protected readonly api = inject(Api);
   private readonly toasts = inject(Toasts);
+  private readonly confirm = inject(Confirm);
+  private readonly favorites = inject(Favorites);
+  private readonly folders = inject(Folders);
   private readonly router = inject(Router);
   private readonly dlg = viewChild.required<ElementRef<HTMLDialogElement>>('dlg');
 
@@ -175,11 +178,14 @@ export class ClustersPage {
   protected readonly form = signal<Cluster>(blank());
   protected brokers = '';
   protected readonly testing = signal(false);
+  protected readonly saving = signal(false);
   protected readonly testResult = signal<{ ok: boolean; text: string } | null>(null);
 
   edit(c?: Cluster) {
     this.form.set(c ? { ...blank(), ...c, saslPassword: '', tlsKey: '' } : blank());
     this.brokers = c?.brokers.join(', ') ?? '';
+    this.testing.set(false);
+    this.testResult.set(null);
     this.dlg().nativeElement.showModal();
   }
 
@@ -188,39 +194,37 @@ export class ClustersPage {
   }
 
   async test() {
+    const f = this.form(); // edit() replaces it: a result for an earlier dialog is dropped
     this.testing.set(true);
     this.testResult.set(null);
-    try {
-      const r = await this.api.post<{ clusterId: string; brokers: number; latencyMs: number }>('/clusters/test', this.payload());
-      this.testResult.set({ ok: true, text: `Connected to ${r.clusterId} — ${r.brokers} broker(s), ${r.latencyMs} ms` });
-    } catch (e) {
-      this.testResult.set({ ok: false, text: e instanceof Error ? e.message : String(e) });
-    } finally {
-      this.testing.set(false);
-    }
+    const res = await this.api.post<{ clusterId: string; brokers: number; latencyMs: number }>('/clusters/test', this.payload()).then(
+      (r) => ({ ok: true, text: `Connected to ${r.clusterId} — ${r.brokers} broker(s), ${r.latencyMs} ms` }),
+      (e) => ({ ok: false, text: e instanceof Error ? e.message : String(e) }),
+    );
+    if (f !== this.form()) return;
+    this.testResult.set(res);
+    this.testing.set(false);
   }
 
-  async save() {
+  save() {
     const p = this.payload();
-    try {
+    return this.toasts.guard(async () => {
       const saved = p.id ? await this.api.put<Cluster>(`/clusters/${p.id}`, p) : await this.api.post<Cluster>('/clusters', p);
       await this.api.refreshClusters();
       this.dlg().nativeElement.close();
       this.toasts.ok(`Saved ${saved.name}`);
       if (!p.id) this.router.navigate(['/c', saved.id]);
-    } catch (e) {
-      this.toasts.err(e);
-    }
+    }, this.saving);
   }
 
   async remove(c: Cluster) {
-    if (!confirm(`Remove the connection "${c.name}"? The cluster itself is not touched.`)) return;
-    try {
+    if (!(await this.confirm.ask('Remove connection', `Remove the connection "${c.name}"? The cluster itself is not touched.`, 'Remove'))) return;
+    await this.toasts.guard(async () => {
       await this.api.del(`/clusters/${c.id}`);
+      this.favorites.forget(c.id);
+      this.folders.forget(c.id);
       await this.api.refreshClusters();
       this.toasts.ok(`Removed ${c.name}`);
-    } catch (e) {
-      this.toasts.err(e);
-    }
+    });
   }
 }

@@ -9,32 +9,27 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 )
 
-func (a *API) overview(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) overview(r *http.Request, c cctx) (any, error) {
 	m, err := c.adm.Metadata(kadm.WithAuthorizedOps(r.Context())) // uncached, see listTopics
 	if err != nil {
 		return nil, err
 	}
 	groups, _ := c.adm.ListGroups(r.Context())
-	partitions, underReplicated, offline := 0, 0, 0
-	topics := 0
+	partitions, underReplicated, offline, topics := 0, 0, 0, 0
+	leaders := map[int32]int{}
 	for _, t := range m.Topics {
 		if !t.IsInternal {
 			topics++
 		}
 		for _, p := range t.Partitions {
 			partitions++
+			leaders[p.Leader]++
 			if len(p.ISR) < len(p.Replicas) {
 				underReplicated++
 			}
 			if p.Leader < 0 {
 				offline++
 			}
-		}
-	}
-	leaders := map[int32]int{}
-	for _, t := range m.Topics {
-		for _, p := range t.Partitions {
-			leaders[p.Leader]++
 		}
 	}
 	type broker struct {
@@ -50,7 +45,7 @@ func (a *API) overview(w http.ResponseWriter, r *http.Request, c cctx) (any, err
 		brokers = append(brokers, broker{b.NodeID, b.Host, b.Port, b.Rack, b.NodeID == m.Controller, leaders[b.NodeID]})
 	}
 	return map[string]any{
-		"clusterId": m.Cluster, "controller": m.Controller, "brokers": brokers,
+		"clusterId": m.Cluster, "brokers": brokers,
 		"topics": topics, "partitions": partitions, "underReplicated": underReplicated,
 		"offlinePartitions": offline, "groups": len(groups),
 	}, nil
@@ -83,7 +78,7 @@ func configsOut(rc kadm.ResourceConfigs, err error) (any, error) {
 	return out, nil
 }
 
-func (a *API) brokerConfigs(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) brokerConfigs(r *http.Request, c cctx) (any, error) {
 	id, err := strconv.Atoi(r.PathValue("broker"))
 	if err != nil {
 		return nil, bad("invalid broker id")

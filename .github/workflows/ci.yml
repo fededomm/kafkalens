@@ -1,4 +1,4 @@
-# Checks every push to main and every pull request: UI build, go vet, tests.
+# Checks every push to main and every pull request: UI build and check, gofmt, go vet (browser and desktop), tests, govulncheck.
 name: ci
 
 on:
@@ -23,10 +23,12 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       # the Go binary embeds web/dist, so the UI must be built before Go compiles
-      - run: npm ci && npx ng build
+      - run: npm ci && npx ng build && npm test
         working-directory: web
       - run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "run gofmt"; exit 1; }
       - run: go vet ./...
+      # desktop.go (tag desktop) is otherwise only compiled by desktop.yml on release; Wails on Windows is pure Go, no cgo/webkit needed
+      - run: GOOS=windows go vet -tags desktop ./...
       - run: go test ./...
       # fails on vulnerabilities reachable from our code (stdlib included: bump go.mod to fix those)
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

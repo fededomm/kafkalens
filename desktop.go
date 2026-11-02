@@ -10,7 +10,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -30,40 +29,37 @@ type Desktop struct {
 	store *store.Store
 	mu    sync.Mutex
 	tails map[string]context.CancelFunc
-	seq   int
 }
 
-// Tail starts streaming new records of topic as "tail:<session>" events, one
-// event per polled batch; an {"error": ...} event reports a failed stream.
-func (d *Desktop) Tail(id, topic string) (string, error) {
+// Tail starts streaming new records of topic as "tail:<sid>" events, one event per polled
+// batch; a Kafka error ends the stream with a "tail:<sid>:error" event (the message). The UI
+// picks sid and subscribes first: Wails drops events emitted before a listener exists.
+func (d *Desktop) Tail(id, topic, sid string) error {
 	cl, ok := d.store.Get(id)
 	if !ok {
-		return "", errors.New("cluster not found")
+		return errors.New("cluster not found")
 	}
-	if !kafka.AcquireTail() {
-		return "", errors.New("too many live tails open")
-	}
-	k, err := kafka.OpenTail(cl, topic)
+	k, stop, err := kafka.OpenTail(cl, topic)
 	if err != nil {
-		kafka.ReleaseTail()
 		log.Warn().Str("cluster", id).Str("topic", topic).Err(err).Msg("live tail")
-		return "", err
+		return err
 	}
 	ctx, cancel := context.WithCancel(d.ctx)
 	d.mu.Lock()
-	d.seq++
-	sid := strconv.Itoa(d.seq)
 	d.tails[sid] = cancel
 	d.mu.Unlock()
 	go func() {
-		defer kafka.ReleaseTail()
-		defer k.Close()
-		kafka.PumpTail(ctx, k, func(batch []kafka.Record) error {
+		defer stop()
+		err := kafka.PumpTail(ctx, k, func(batch []kafka.Record) error {
 			wr.EventsEmit(d.ctx, "tail:"+sid, batch)
 			return nil
 		})
+		if err != nil {
+			log.Warn().Str("cluster", id).Str("topic", topic).Err(err).Msg("live tail")
+			wr.EventsEmit(d.ctx, "tail:"+sid+":error", err.Error())
+		}
 	}()
-	return sid, nil
+	return nil
 }
 
 func (d *Desktop) StopTail(sid string) {

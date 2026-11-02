@@ -11,9 +11,9 @@ import { Icon } from '../icon';
 <div class="cfg-tools row">
   <div class="search grow">
     <app-icon name="search" />
-    <input class="input" placeholder="Filter configs…" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Filter configs" />
+    <input class="input" placeholder="Filter configs…" [(ngModel)]="q" aria-label="Filter configs" />
   </div>
-  <label class="check"><input type="checkbox" [ngModel]="onlyOverrides()" (ngModelChange)="onlyOverrides.set($event)" /> Overrides only</label>
+  <label class="check"><input type="checkbox" [(ngModel)]="onlyOverrides" /> Overrides only</label>
   <span class="spacer"></span>
   <ng-content />
 </div>
@@ -94,6 +94,6 @@ export class ConfigTable {
 
   commit(c: ConfigEntry) {
     this.editing.set(null);
-    if (this.draft !== c.value) this.changed.emit({ key: c.key, value: this.draft });
+    if (this.draft !== (c.value ?? '')) this.changed.emit({ key: c.key, value: this.draft });
   }
 }

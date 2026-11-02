@@ -17,7 +17,8 @@
         </label>
         <div class="check-cell">
           <label class="check"><input type="checkbox" name="kn" [(ngModel)]="pr.keyNull" /> Null key</label>
-          <label class="check" title="Render key, value and header values per message"><input type="checkbox" name="tpl" [(ngModel)]="pr.template" (ngModelChange)="checkJson()" /> Template</label>
+          <label class="check" title="Render key, value and header values per message"><input type="checkbox" name="tpl" [(ngModel)]="pr.template" (ngModelChange)="checkJson()" [disabled]="pr.base64" /> Template</label>
+          @if (pr.base64) { <span class="badge warn" title="Key and value are base64: the original bytes are sent">base64</span> }
         </div>
       </div>
       @if (pr.template) {
@@ -63,10 +64,11 @@
         @for (h of pr.headers; track $index; let i = $index) {
           <div class="row">
             <input class="input mono" [name]="'hk' + i" [(ngModel)]="h.key" placeholder="key" aria-label="Header key" />
-            <div class="tpl-wrap" [class.on]="pr.template">
-              @if (pr.template) { <div class="input mono tpl-hl" aria-hidden="true" [innerHTML]="tplHtml(h.value)"></div> }
+            <div class="tpl-wrap" [class.on]="pr.template && !h.binary">
+              @if (pr.template && !h.binary) { <div class="input mono tpl-hl" aria-hidden="true" [innerHTML]="tplHtml(h.value)"></div> }
               <input class="input mono" [name]="'hv' + i" [(ngModel)]="h.value" placeholder="value" aria-label="Header value" (scroll)="syncHl($event)" (input)="syncHl($event)" (keyup)="syncHl($event)" (click)="syncHl($event)" />
             </div>
+            @if (h.binary) { <span class="badge warn" title="Not UTF-8: the value is base64, the original bytes are sent">base64</span> }
             <button type="button" class="btn ghost icon sm" (click)="pr.headers.splice(i, 1)" aria-label="Remove header"><app-icon name="x" /></button>
           </div>
         }

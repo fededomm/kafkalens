@@ -1,10 +1,13 @@
 package api
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 )
 
 type topicRow struct {
@@ -17,13 +20,16 @@ type topicRow struct {
 	Error             string `json:"error,omitempty"`
 }
 
-func (a *API) listTopics(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) listTopics(r *http.Request, c cctx) (any, error) {
 	ctx := r.Context()
-	// Bypass the client's metadata cache: Lag (topic detail, groups) caches topics of other
+	// Bypass the client's metadata cache: Lag (groups list) caches topics of other
 	// groups we may not be authorized on, and a cached TOPIC_AUTHORIZATION_FAILED fails the whole list.
 	ts, err := c.adm.ListTopicsWithInternal(kadm.WithAuthorizedOps(ctx))
 	if err != nil {
 		return nil, err
+	}
+	if r.URL.Query().Has("names") { // command palette: no offsets
+		return ts.Names(), nil
 	}
 	starts, _ := c.adm.ListStartOffsets(ctx, ts.Names()...)
 	ends, _ := c.adm.ListEndOffsets(ctx, ts.Names()...)
@@ -48,15 +54,18 @@ func (a *API) listTopics(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 	return out, nil
 }
 
-func (a *API) topicDetail(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) topicDetail(r *http.Request, c cctx) (any, error) {
 	ctx, topic := r.Context(), r.PathValue("topic")
 	ts, err := c.adm.ListTopicsWithInternal(ctx, topic)
 	if err != nil {
 		return nil, err
 	}
 	t, ok := ts[topic]
-	if !ok || t.Err != nil {
+	if !ok || errors.Is(t.Err, kerr.UnknownTopicOrPartition) {
 		return nil, httpErr{http.StatusNotFound, "topic not found"}
+	}
+	if t.Err != nil {
+		return nil, t.Err
 	}
 	starts, _ := c.adm.ListStartOffsets(ctx, topic)
 	ends, _ := c.adm.ListEndOffsets(ctx, topic)
@@ -78,21 +87,30 @@ func (a *API) topicDetail(w http.ResponseWriter, r *http.Request, c cctx) (any, 
 	if err != nil {
 		return nil, err
 	}
-	// consumer groups reading this topic
+	// consumer groups reading this topic, lag from this topic's offsets only (a cluster-wide Lag
+	// would list the offsets of every topic every group reads)
 	groups := []map[string]any{}
-	if lg, err := c.adm.ListGroups(ctx); err == nil {
-		if lags, err := c.adm.Lag(ctx, lg.Groups()...); err == nil {
-			for _, g := range lags.Sorted() {
-				if tl, ok := g.Lag.TotalByTopic()[topic]; ok {
-					groups = append(groups, map[string]any{"group": g.Group, "state": g.State, "lag": tl.Lag})
-				}
+	lg, gerr := c.adm.ListGroups(ctx) // a partial failure still returns the groups it listed
+	if len(lg) > 0 {
+		dg, err := c.adm.DescribeGroups(ctx, lg.Groups()...)
+		fetched := c.adm.FetchManyOffsets(ctx, lg.Groups()...)
+		gerr = cmp.Or(gerr, err)
+		for _, g := range dg.Sorted() { // g.Err unchecked: KIP-848 groups fail the classic describe, their commits count
+			f := fetched[g.Group]
+			gerr = cmp.Or(gerr, f.Err)
+			if tl, ok := kadm.CalculateGroupLagWithStartOffsets(g, f.Fetched, starts, ends).TotalByTopic()[topic]; ok {
+				groups = append(groups, map[string]any{"group": g.Group, "state": g.State, "lag": tl.Lag})
 			}
 		}
 	}
-	return map[string]any{"name": topic, "internal": t.IsInternal, "id": t.ID.String(), "partitions": parts, "configs": configs, "groups": groups}, nil
+	out := map[string]any{"name": topic, "internal": t.IsInternal, "partitions": parts, "configs": configs, "groups": groups}
+	if gerr != nil {
+		out["groupsError"] = gerr.Error()
+	}
+	return out, nil
 }
 
-func (a *API) createTopic(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) createTopic(r *http.Request, c cctx) (any, error) {
 	var req struct {
 		Name              string             `json:"name"`
 		Partitions        int32              `json:"partitions"`
@@ -111,22 +129,32 @@ func (a *API) createTopic(w http.ResponseWriter, r *http.Request, c cctx) (any, 
 	if req.ReplicationFactor == 0 {
 		req.ReplicationFactor = -1
 	}
-	res, err := c.adm.CreateTopic(r.Context(), req.Partitions, req.ReplicationFactor, req.Configs, req.Name)
+	_, err := c.adm.CreateTopic(r.Context(), req.Partitions, req.ReplicationFactor, req.Configs, req.Name)
+	return nil, err
+}
+
+func (a *API) deleteTopic(r *http.Request, c cctx) (any, error) {
+	_, err := c.adm.DeleteTopic(r.Context(), r.PathValue("topic"))
+	return nil, err
+}
+
+// truncateTopic deletes every record up to the current end of each partition; the topic and its config stay.
+func (a *API) truncateTopic(r *http.Request, c cctx) (any, error) {
+	ends, err := c.adm.ListEndOffsets(r.Context(), r.PathValue("topic"))
 	if err == nil {
-		err = res.Err
+		err = ends.Error()
+	}
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.adm.DeleteRecords(r.Context(), ends.Offsets())
+	if err == nil {
+		err = res.Error()
 	}
 	return nil, err
 }
 
-func (a *API) deleteTopic(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
-	res, err := c.adm.DeleteTopic(r.Context(), r.PathValue("topic"))
-	if err == nil {
-		err = res.Err
-	}
-	return nil, err
-}
-
-func (a *API) alterTopicConfigs(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) alterTopicConfigs(r *http.Request, c cctx) (any, error) {
 	var req map[string]*string // nil value = reset to default
 	if err := decode(r, &req); err != nil {
 		return nil, err
@@ -151,7 +179,7 @@ func (a *API) alterTopicConfigs(w http.ResponseWriter, r *http.Request, c cctx) 
 	return nil, nil
 }
 
-func (a *API) addPartitions(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) addPartitions(r *http.Request, c cctx) (any, error) {
 	var req struct {
 		Total int `json:"total"`
 	}

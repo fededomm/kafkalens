@@ -8,11 +8,16 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 )
 
-func (a *API) listGroups(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) listGroups(r *http.Request, c cctx) (any, error) {
 	ctx := r.Context()
 	lg, err := c.adm.ListGroups(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if r.URL.Query().Has("names") { // command palette: no lag
+		names := append([]string{}, lg.Groups()...)
+		slices.Sort(names)
+		return names, nil
 	}
 	out := []map[string]any{}
 	if len(lg) == 0 {
@@ -29,8 +34,8 @@ func (a *API) listGroups(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 		}
 		slices.Sort(topics)
 		row := map[string]any{
-			"group": g.Group, "state": g.State, "protocolType": lg[g.Group].ProtocolType,
-			"members": len(g.Members), "coordinator": g.Coordinator.NodeID, "lag": g.Lag.Total(), "topics": topics,
+			"group": g.Group, "state": g.State, "members": len(g.Members),
+			"coordinator": g.Coordinator.NodeID, "lag": g.Lag.Total(), "topics": topics,
 		}
 		if e := g.Error(); e != nil {
 			row["error"] = e.Error()
@@ -40,8 +45,8 @@ func (a *API) listGroups(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 	return out, nil
 }
 
-func (a *API) groupDetail(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
-	name := r.PathValue("group")
+func (a *API) groupDetail(r *http.Request, c cctx) (any, error) {
+	name := pathParam(r, "group")
 	lags, err := c.adm.Lag(r.Context(), name)
 	if err != nil {
 		return nil, err
@@ -89,12 +94,12 @@ func (a *API) groupDetail(w http.ResponseWriter, r *http.Request, c cctx) (any, 
 		parts = append(parts, p)
 	}
 	return map[string]any{
-		"group": g.Group, "state": g.State, "protocol": g.Protocol, "protocolType": g.ProtocolType,
+		"group": g.Group, "state": g.State, "protocol": g.Protocol,
 		"coordinator": g.Coordinator.NodeID, "members": members, "partitions": parts, "lag": g.Lag.Total(),
 	}, nil
 }
 
-func (a *API) resetGroup(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
+func (a *API) resetGroup(r *http.Request, c cctx) (any, error) {
 	var req struct {
 		Topic     string `json:"topic"`
 		To        string `json:"to"` // earliest | latest | timestamp | offset
@@ -105,7 +110,10 @@ func (a *API) resetGroup(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 	if err := decode(r, &req); err != nil {
 		return nil, err
 	}
-	ctx, group := r.Context(), r.PathValue("group")
+	if (req.To == "timestamp" && req.Timestamp <= 0) || (req.To == "offset" && req.Offset < 0) {
+		return nil, bad("invalid %s to reset to", req.To)
+	}
+	ctx, group := r.Context(), pathParam(r, "group")
 	dg, err := c.adm.DescribeGroups(ctx, group)
 	if err != nil {
 		return nil, err
@@ -127,6 +135,12 @@ func (a *API) resetGroup(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 	if err != nil {
 		return nil, err
 	}
+	var starts kadm.ListedOffsets // an explicit offset is clamped to [log start, end], like Browse
+	if req.To == "offset" {
+		if starts, err = c.adm.ListStartOffsets(ctx, req.Topic); err != nil {
+			return nil, err
+		}
+	}
 	offs := kadm.Offsets{req.Topic: {}}
 	for p, lo := range listed[req.Topic] {
 		if req.Partition != nil && *req.Partition != p {
@@ -137,24 +151,17 @@ func (a *API) resetGroup(w http.ResponseWriter, r *http.Request, c cctx) (any, e
 		}
 		at := lo.Offset
 		if req.To == "offset" {
-			at = min(req.Offset, lo.Offset)
+			at = min(max(req.Offset, starts[req.Topic][p].Offset), lo.Offset)
 		}
 		offs[req.Topic][p] = kadm.Offset{Topic: req.Topic, Partition: p, At: at, LeaderEpoch: -1}
 	}
 	if len(offs[req.Topic]) == 0 {
 		return nil, bad("no partitions matched")
 	}
-	res, err := c.adm.CommitOffsets(ctx, group, offs)
-	if err == nil {
-		err = res.Error()
-	}
-	return nil, err
+	return nil, c.adm.CommitAllOffsets(ctx, group, offs)
 }
 
-func (a *API) deleteGroup(w http.ResponseWriter, r *http.Request, c cctx) (any, error) {
-	res, err := c.adm.DeleteGroup(r.Context(), r.PathValue("group"))
-	if err == nil {
-		err = res.Err
-	}
+func (a *API) deleteGroup(r *http.Request, c cctx) (any, error) {
+	_, err := c.adm.DeleteGroup(r.Context(), pathParam(r, "group"))
 	return nil, err
 }

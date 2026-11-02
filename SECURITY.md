@@ -10,7 +10,7 @@ Only the latest release is supported with security fixes.
 
 KafkaLens is a **development tool**. Keep these properties in mind:
 
-- **Browser mode** (`kafkalens`) runs a local HTTP API **without authentication**. It listens on `127.0.0.1` by default: anything that can reach that port can manage the configured clusters. Don't bind it to other interfaces (`-addr 0.0.0.0:...`) on untrusted networks.
+- **Browser mode** (`kafkalens`) runs a local HTTP API **without authentication**. It listens on `127.0.0.1` by default: anything that can reach that port can manage the configured clusters. To stop DNS rebinding and cross-site POSTs from web pages in your own browser, it only accepts requests whose `Host` is `localhost` or a loopback IP, and blocks cross-origin unsafe requests (POST, PUT, DELETE). Access from the LAN via a hostname or LAN IP is not supported.
 - **Desktop mode** (Wails app) opens no TCP port; the UI talks to the backend in-process.
 - **Saved credentials** (SASL passwords, TLS client keys) are stored in plain text in `clusters.json`, readable only by your user (mode 0600). They are never sent back to the UI.
 - **Read-only mode** guards against mistakes in the UI; it is not access control. Restrict what KafkaLens can do with Kafka ACLs on the SASL user.

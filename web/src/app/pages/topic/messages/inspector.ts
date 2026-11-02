@@ -26,8 +26,7 @@ export class Inspector {
     return pretty ? { kind: 'json' as const, html: highlightJson(pretty), text: pretty } : { kind: 'text' as const, html: '', text: s };
   }
 
-  async copy(text: string, what: string) {
-    await navigator.clipboard.writeText(text);
-    this.toasts.ok(`${what} copied`);
+  copy(text: string, what: string) {
+    return this.toasts.guard(async () => { await navigator.clipboard.writeText(text); this.toasts.ok(`${what} copied`); });
   }
 }

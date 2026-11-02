@@ -6,7 +6,7 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "node src/app/tpl.check.ts"
   },
   "private": true,
   "packageManager": "npm@12.2.0",
@@ -26,7 +26,6 @@
     "@angular/build": "^22.2.2",
     "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.3",
-    "prettier": "^3.8.1",
     "typescript": "~6.0.2"
   }
 }

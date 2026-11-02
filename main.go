@@ -40,20 +40,15 @@ func version() string {
 //go:embed config.yaml
 var defaultSettings []byte
 
-// clustersFile is the clusters file from the settings, or the default location.
+// clustersFile is the clusters file from the settings, or <user config dir>/kafkalens/clusters.json.
 func clustersFile(cfg config.Config) string {
 	if cfg.Clusters != "" {
 		return cfg.Clusters
 	}
-	return defaultConfig()
-}
-
-func defaultConfig() string {
 	home, err := os.UserConfigDir()
 	if err != nil {
 		fatal("cannot find the user config dir", "error", err)
 	}
-
 	return filepath.Join(home, "kafkalens", "clusters.json")
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -33,11 +34,11 @@ func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 	r.Get("/version", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]string{"version": version}, nil) })
 
 	r.Route("/clusters", func(r chi.Router) {
-		r.Get("/", a.listClusters)
-		r.Post("/", a.saveCluster)
-		r.Post("/test", a.testCluster)
-		r.Put("/{id}", a.saveCluster)
-		r.Delete("/{id}", a.deleteCluster)
+		r.Get("/", handle(a.listClusters))
+		r.Post("/", handle(a.saveCluster))
+		r.Post("/test", handle(a.testCluster))
+		r.Put("/{id}", handle(a.saveCluster))
+		r.Delete("/{id}", handle(a.deleteCluster))
 	})
 
 	r.Route("/c/{id}", func(r chi.Router) {
@@ -58,6 +59,7 @@ func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 				r.Use(writable)
 				r.Post("/topics", handle(a.createTopic))
 				r.Delete("/topics/{topic}", handle(a.deleteTopic))
+				r.Delete("/topics/{topic}/records", handle(a.truncateTopic))
 				r.Put("/topics/{topic}/configs", handle(a.alterTopicConfigs))
 				r.Post("/topics/{topic}/partitions", handle(a.addPartitions))
 				r.Post("/topics/{topic}/produce", handle(a.produce))
@@ -109,6 +111,18 @@ func decode(r *http.Request, v any) error {
 	return nil
 }
 
+// pathParam is a decoded path parameter: chi routes on RawPath when the request has one,
+// leaving params percent-encoded (group "app:prod" arrives as "app%3Aprod").
+func pathParam(r *http.Request, k string) string {
+	v := r.PathValue(k)
+	if r.URL.RawPath != "" {
+		if s, err := url.PathUnescape(v); err == nil {
+			return s
+		}
+	}
+	return v
+}
+
 // cctx is the cluster a /c/{id} request targets, set by withCluster.
 type cctx struct {
 	cluster store.Cluster
@@ -119,12 +133,12 @@ type cctxKey struct{}
 
 func clusterOf(r *http.Request) cctx { c, _ := r.Context().Value(cctxKey{}).(cctx); return c }
 
-type handler func(w http.ResponseWriter, r *http.Request, c cctx) (any, error)
+type handler func(r *http.Request, c cctx) (any, error)
 
 // handle adapts a handler that returns its result to http, replying with JSON.
 func handle(h handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		v, err := h(w, r, clusterOf(r))
+		v, err := h(r, clusterOf(r))
 		reply(w, v, err)
 	}
 }

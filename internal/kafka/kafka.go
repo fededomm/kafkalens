@@ -86,15 +86,6 @@ func (p *Pool) Admin(c store.Cluster) (*kadm.Client, error) {
 	return kadm.NewClient(cl), nil
 }
 
-func (p *Pool) Raw(c store.Cluster) (*kgo.Client, error) {
-	if _, err := p.Admin(c); err != nil {
-		return nil, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.clients[c.ID], nil
-}
-
 func (p *Pool) Drop(id string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -105,8 +96,9 @@ func (p *Pool) Drop(id string) {
 }
 
 type Header struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Binary bool   `json:"binary,omitempty"` // value is base64 when true
 }
 
 type Record struct {
@@ -139,7 +131,11 @@ func toRecord(r *kgo.Record) Record {
 		Size: len(r.Key) + len(r.Value), Headers: []Header{},
 	}
 	for _, h := range r.Headers {
-		out.Headers = append(out.Headers, Header{h.Key, string(h.Value)})
+		hd := Header{Key: h.Key, Value: string(h.Value), Binary: !utf8.Valid(h.Value)}
+		if hd.Binary {
+			hd.Value = base64.StdEncoding.EncodeToString(h.Value)
+		}
+		out.Headers = append(out.Headers, hd)
 	}
 	return out
 }
@@ -234,7 +230,8 @@ func Browse(ctx context.Context, c store.Cluster, adm *kadm.Client, topic string
 	}
 
 	opts, _ := ClientOpts(c)
-	cl, err := kgo.NewClient(append(opts, kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{topic: from}))...)
+	// control records kept: a transaction's commit marker can be the last offset before the end
+	cl, err := kgo.NewClient(append(opts, kgo.KeepControlRecords(), kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{topic: from}))...)
 	if err != nil {
 		return resp, err
 	}
@@ -250,15 +247,21 @@ func Browse(ctx context.Context, c store.Cluster, adm *kadm.Client, topic string
 			resp.Partial = true
 			break
 		}
+		if err := fetchErr(fs); err != nil {
+			return resp, err
+		}
 		fs.EachRecord(func(r *kgo.Record) {
 			end, live := stopAt[r.Partition]
 			if !live || r.Offset >= end {
 				return
 			}
-			resp.Scanned++
 			if r.Offset+1 >= end {
 				delete(stopAt, r.Partition)
 			}
+			if r.Attrs.IsControl() {
+				return
+			}
+			resp.Scanned++
 			if rec := toRecord(r); rec.matches(q) && (latest || len(resp.Records) < req.Limit) {
 				resp.Records = append(resp.Records, rec)
 			}
@@ -276,4 +279,15 @@ func Browse(ctx context.Context, c store.Cluster, adm *kadm.Client, topic string
 		resp.Records = resp.Records[len(resp.Records)-req.Limit:]
 	}
 	return resp, nil
+}
+
+// fetchErr is the first fetch error that stops consuming (authorization, deleted topic...);
+// data-loss notices are informational: the client resets and goes on.
+func fetchErr(fs kgo.Fetches) error {
+	for _, e := range fs.Errors() {
+		if _, ok := errors.AsType[*kgo.ErrDataLoss](e.Err); !ok {
+			return e.Err
+		}
+	}
+	return nil
 }

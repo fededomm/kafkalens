@@ -32,8 +32,9 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 // Unwrap lets http.ResponseController reach the real writer (Flush for the SSE tail).
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-// logRequests logs one line per API call: failures always, successful reads only at debug
-// level (the UI polls), successful writes at info. Bodies are never logged: they can hold credentials.
+// logRequests logs one line per API call: failures always, successful reads only at debug level
+// (the default; the UI polls, so set info for a quieter log), successful writes at info.
+// Bodies are never logged: they can hold credentials.
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

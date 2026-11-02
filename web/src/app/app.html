@@ -69,7 +69,7 @@
       [ngModel]="query()" (ngModelChange)="query.set($event); active.set(0)" (keydown)="paletteKey($event)" />
   </div>
   <ul class="pal-list" role="listbox">
-    @for (it of results(); track it.hint + it.label; let i = $index) {
+    @for (it of results(); track it.link.join('/'); let i = $index) {
       <li role="option" [attr.aria-selected]="i === active()" [class.on]="i === active()" (click)="go(it)" (mousemove)="active.set(i)">
         <app-icon [name]="it.icon" class="dim" />
         <span class="pal-label">{{ it.label }}</span>
@@ -80,6 +80,23 @@
     }
   </ul>
   <div class="pal-foot dim"><kbd>↑</kbd><kbd>↓</kbd> navigate <kbd>↵</kbd> open <kbd>Esc</kbd> close</div>
+</dialog>
+
+<dialog #confirmDlg class="dlg" (close)="confirm.answer(false)">
+  <form (ngSubmit)="confirm.answer(true)">
+    <div class="dlg-head"><div><h2>{{ confirm.req()?.title }}</h2><p>{{ confirm.req()?.text }}</p></div></div>
+    @if (confirm.req()?.typed) {
+      <div class="dlg-body">
+        <label class="field"><span>Type the name to confirm</span>
+          <input class="input mono" name="typed" [(ngModel)]="confirm.typed" autocomplete="off" />
+        </label>
+      </div>
+    }
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" (click)="confirm.answer(false)">Cancel</button>
+      <button class="btn danger solid" [disabled]="!!confirm.req()?.typed && confirm.typed() !== confirm.req()?.typed">{{ confirm.req()?.action }}</button>
+    </div>
+  </form>
 </dialog>
 
 <div #toastLayer class="toasts" popover="manual" aria-live="polite">

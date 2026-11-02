@@ -1,4 +1,4 @@
-// Run: node --experimental-strip-types src/app/tpl.check.ts
+// Run: npm test
 import assert from 'node:assert/strict';
 import { tplHtml, tplStub, tplValid } from './tpl.ts';
 
