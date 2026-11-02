@@ -3,6 +3,12 @@
 All notable changes to KafkaLens are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-02
+
+### Added
+
+- **Topic folders.** Group topics into named folders from the folder button on each row of the topic list; a topic can be in several folders. When folders exist, a selector next to the filters shows only the topics of one folder, and the trash button next to it deletes the folder (the topics are not touched). **New folder** creates a folder from a prefix (e.g. `orders.`): it holds every topic whose name starts with it, ignoring case like the search box, including topics created later, and those topics can't be taken out one by one. A folder is removed when its last topic is taken out. Like favorites, folders are saved per cluster in the local storage of the browser or desktop app.
+
 ## [0.4.0] - 2026-10-16
 
 ### Added
@@ -55,6 +61,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.5.0]: https://github.com/fededomm/kafkalens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fededomm/kafkalens/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/fededomm/kafkalens/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/fededomm/kafkalens/compare/v0.2.0...v0.3.0

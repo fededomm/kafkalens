@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, computed, effect, ElementRef, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Api, Favorites, Toasts, TopicRow } from '../api';
+import { Api, Favorites, Folders, Toasts, TopicRow } from '../api';
 import { NumPipe } from '../fmt';
 import { Icon } from '../icon';
 
@@ -35,6 +35,18 @@ const PAGE = 200;
         <input class="input" placeholder="Filter topics…  (regex allowed)" [ngModel]="q()" (ngModelChange)="q.set($event)" aria-label="Filter topics" />
       </div>
       <div class="row toggles">
+        <div class="row">
+          @if (folderNames().length) {
+            <select class="input folder-sel" [ngModel]="folder()" (ngModelChange)="folder.set($event)" aria-label="Folder">
+              <option value="">All folders</option>
+              @for (f of folderNames(); track f) { <option [value]="f">{{ f }}</option> }
+            </select>
+            @if (folder()) {
+              <button class="btn ghost icon sm" (click)="dropFolder()" title="Delete folder" [attr.aria-label]="'Delete folder ' + folder()"><app-icon name="trash" /></button>
+            }
+          }
+          <button class="btn ghost sm" (click)="openPrefixFolder()"><app-icon name="folder" /> New folder</button>
+        </div>
         <label class="check"><input type="checkbox" [ngModel]="favOnly()" (ngModelChange)="favOnly.set($event)" /> Favorites only</label>
         <label class="check"><input type="checkbox" [ngModel]="showInternal()" (ngModelChange)="showInternal.set($event)" /> Show internal</label>
       </div>
@@ -75,6 +87,8 @@ const PAGE = 200;
                 @else { <span class="healthy"><span class="dot"></span>Healthy</span> }
               </td>
               <td class="acts">
+                <button class="btn ghost icon sm row-act" [class.on]="inAnyFolder(t.name)" (click)="$event.stopPropagation(); openFolders(t)"
+                  title="Folders" [attr.aria-label]="'Folders of ' + t.name"><app-icon name="folder" /></button>
                 <button class="btn ghost icon sm row-act" (click)="$event.stopPropagation(); askDelete(t)" [disabled]="readOnly() || t.internal"
                   [attr.aria-label]="'Delete ' + t.name"><app-icon name="trash" /></button>
               </td>
@@ -143,6 +157,49 @@ const PAGE = 200;
   </form>
 </dialog>
 
+<dialog #folderDlg class="dlg">
+  <div class="dlg-head">
+    <div><h2>Folders</h2><p>Group <b class="mono">{{ folderTopic() }}</b> with other topics. Saved in this browser.</p></div>
+    <button type="button" class="btn ghost icon sm" (click)="folderDlg.close()" aria-label="Close"><app-icon name="x" /></button>
+  </div>
+  <div class="dlg-body">
+    @for (f of folderNames(); track f) {
+      @let rule = folders.rule(id(), f, folderTopic());
+      <label class="check" [title]="rule ? 'Every topic starting with ' + rule.slice(0, -1) + ' is in this folder' : ''">
+        <input type="checkbox" [ngModel]="folders.has(id(), f, folderTopic())" (ngModelChange)="folders.put(id(), f, folderTopic(), $event)" [disabled]="!!rule" />
+        {{ f }} @if (rule) { <span class="mono dim">{{ rule }}</span> }
+      </label>
+    }
+    <form class="row" (ngSubmit)="addFolder()">
+      <input class="input grow" name="folder" [(ngModel)]="newFolder" placeholder="New folder" aria-label="New folder name" autocomplete="off" />
+      <button class="btn" [disabled]="!newFolder.trim()"><app-icon name="plus" /> Add</button>
+    </form>
+  </div>
+</dialog>
+
+<dialog #prefixDlg class="dlg">
+  <form (ngSubmit)="createPrefixFolder()" #pf="ngForm">
+    <div class="dlg-head">
+      <div><h2>New folder</h2><p>Holds every topic whose name starts with the prefix, including topics created later.</p></div>
+      <button type="button" class="btn ghost icon sm" (click)="prefixDlg.close()" aria-label="Close"><app-icon name="x" /></button>
+    </div>
+    <div class="dlg-body">
+      <label class="field"><span>Topics starting with</span>
+        <input class="input mono" name="prefix" required pattern="[a-zA-Z0-9._-]+" [ngModel]="prefix()" (ngModelChange)="prefix.set($event)" autofocus autocomplete="off" placeholder="orders." />
+        <span class="hint">{{ prefixMatches() | num }} topics match now, ignoring case</span>
+      </label>
+      <label class="field"><span>Name</span>
+        <input class="input" name="name" [(ngModel)]="prefixName" autocomplete="off" [placeholder]="prefix() || 'orders'" />
+        <span class="hint">Defaults to the prefix. An existing name adds the rule to that folder.</span>
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" class="btn ghost" (click)="prefixDlg.close()">Cancel</button>
+      <button class="btn primary" [disabled]="!pf.valid">Create</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog #deleteDlg class="dlg">
   <form (ngSubmit)="confirmDelete()">
     <div class="dlg-head">
@@ -170,17 +227,22 @@ td.fav { padding-right: 0; }
 .m { margin: 12px 14px; }
 .more td { text-align: center; padding: 10px; }
 .toggles { gap: 18px; }
+.folder-sel { width: auto; max-width: 200px; }
+tr .row-act.on { opacity: 1; color: var(--accent); }
 `,
 })
 export class TopicsPage {
   readonly id = input.required<string>();
   private readonly api = inject(Api);
   protected readonly fav = inject(Favorites);
+  protected readonly folders = inject(Folders);
   private readonly toasts = inject(Toasts);
   private readonly router = inject(Router);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly createDlg = viewChild.required<ElementRef<HTMLDialogElement>>('createDlg');
   private readonly deleteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('deleteDlg');
+  private readonly folderDlg = viewChild.required<ElementRef<HTMLDialogElement>>('folderDlg');
+  private readonly prefixDlg = viewChild.required<ElementRef<HTMLDialogElement>>('prefixDlg');
 
   protected readonly topics = signal<TopicRow[] | null>(null);
   protected readonly loading = signal(false);
@@ -190,6 +252,20 @@ export class TopicsPage {
   protected readonly showInternal = signal(false);
   protected readonly favOnly = signal(false);
   protected readonly sort = signal<{ key: SortKey; dir: 1 | -1 }>({ key: 'name', dir: 1 });
+  protected readonly folderNames = computed(() => this.folders.names(this.id()));
+  // back to all topics when the chosen folder disappears (emptied, deleted, other cluster)
+  protected readonly folder = linkedSignal<string[], string>({
+    source: this.folderNames,
+    computation: (names, prev) => (prev && names.includes(prev.value) ? prev.value : ''),
+  });
+  protected readonly folderTopic = signal('');
+  protected newFolder = '';
+  protected readonly prefix = signal('');
+  protected prefixName = '';
+  protected readonly prefixMatches = computed(() => {
+    const p = this.prefix().trim();
+    return p ? (this.topics() ?? []).filter((t) => Folders.startsWith(t.name, p)).length : 0;
+  });
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
 
   protected readonly visible = computed(() => {
@@ -199,8 +275,9 @@ export class TopicsPage {
     const { key, dir } = this.sort();
     const favs = this.fav.set(this.id());
     const fav = (t: TopicRow) => favs.has(t.name);
+    const folder = this.folder();
     return (this.topics() ?? [])
-      .filter((t) => (this.showInternal() || !t.internal) && (!this.favOnly() || fav(t)) && (!q || (re ? re.test(t.name) : t.name.includes(q))))
+      .filter((t) => (this.showInternal() || !t.internal) && (!this.favOnly() || fav(t)) && (!folder || this.folders.has(this.id(), folder, t.name)) && (!q || (re ? re.test(t.name) : t.name.includes(q))))
       // favorites stay pinned on top, each group in the chosen order
       .sort((a, b) => Number(fav(b)) - Number(fav(a)) || (a[key] < b[key] ? -dir : a[key] > b[key] ? dir : 0));
   });
@@ -240,6 +317,42 @@ export class TopicsPage {
   }
 
   open(t: TopicRow) { this.router.navigate(['/c', this.id(), 'topics', t.name]); }
+
+  inAnyFolder(topic: string) { return this.folderNames().some((f) => this.folders.has(this.id(), f, topic)); }
+
+  openFolders(t: TopicRow) {
+    this.folderTopic.set(t.name);
+    this.newFolder = '';
+    this.folderDlg().nativeElement.showModal();
+  }
+
+  addFolder() {
+    const name = this.newFolder.trim();
+    if (!name) return;
+    this.folders.put(this.id(), name, this.folderTopic(), true);
+    this.newFolder = '';
+  }
+
+  openPrefixFolder() {
+    const q = this.q().trim();
+    this.prefix.set(/^[\w.-]+$/.test(q) ? q : ''); // start from the search box when it holds a plain name
+    this.prefixName = '';
+    this.prefixDlg().nativeElement.showModal();
+  }
+
+  createPrefixFolder() {
+    const p = this.prefix().trim();
+    if (!p) return;
+    const name = this.prefixName.trim() || p;
+    this.folders.put(this.id(), name, p + '*', true);
+    this.folder.set(name);
+    this.prefixDlg().nativeElement.close();
+  }
+
+  dropFolder() {
+    const f = this.folder();
+    if (confirm(`Delete the folder "${f}"? Its topics are not touched.`)) this.folders.remove(this.id(), f);
+  }
 
   private emptyNt() {
     return { name: '', partitions: null as number | null, replicationFactor: null as number | null, cleanup: '', retention: '', configs: {} as Record<string, string> };

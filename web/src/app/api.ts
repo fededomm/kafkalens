@@ -125,6 +125,54 @@ export class Favorites {
   }
 }
 
+/**
+ * Named groups of topics per cluster, stored like Favorites. Entries are topic names or prefix rules written
+ * "orders.*" ('*' is not allowed in topic names), so later topics with the prefix join on their own.
+ * A folder exists while it holds at least one entry.
+ */
+@Injectable({ providedIn: 'root' })
+export class Folders {
+  private readonly byCluster = signal<Record<string, Record<string, string[]>>>(Folders.read());
+
+  private static read(): Record<string, Record<string, string[]>> {
+    try { return JSON.parse(localStorage.getItem('folders') ?? '{}'); } catch { return {}; }
+  }
+
+  names(cluster: string) { return Object.keys(this.byCluster()[cluster] ?? {}).sort((a, b) => a.localeCompare(b)); }
+
+  /** Prefixes ignore case, like the topic search: clusters often mix "ContiStream-" and "Contistream-". */
+  static startsWith(topic: string, prefix: string) { return topic.toLowerCase().startsWith(prefix.toLowerCase()); }
+
+  has(cluster: string, folder: string, topic: string) {
+    return this.byCluster()[cluster]?.[folder]?.some((e) => e === topic || (e.endsWith('*') && Folders.startsWith(topic, e.slice(0, -1)))) ?? false;
+  }
+
+  /** The prefix rule that puts topic in folder, if any: such a topic can't be taken out on its own. */
+  rule(cluster: string, folder: string, topic: string) {
+    return this.byCluster()[cluster]?.[folder]?.find((e) => e.endsWith('*') && Folders.startsWith(topic, e.slice(0, -1)));
+  }
+
+  /** Adds or removes a topic or rule; adding to an unknown folder creates it, removing the last entry drops it. */
+  put(cluster: string, folder: string, topic: string, on: boolean) {
+    const fs = { ...this.byCluster()[cluster] };
+    const l = (fs[folder] ?? []).filter((t) => t !== topic);
+    if (on) l.push(topic);
+    if (l.length) fs[folder] = l; else delete fs[folder];
+    this.save(cluster, fs);
+  }
+
+  remove(cluster: string, folder: string) {
+    const fs = { ...this.byCluster()[cluster] };
+    delete fs[folder];
+    this.save(cluster, fs);
+  }
+
+  private save(cluster: string, fs: Record<string, string[]>) {
+    this.byCluster.update((m) => ({ ...m, [cluster]: fs }));
+    localStorage.setItem('folders', JSON.stringify(this.byCluster()));
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class Toasts {
   readonly items = signal<{ id: number; kind: 'ok' | 'err'; text: string }[]>([]);
