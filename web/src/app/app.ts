@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { filter, map } from 'rxjs';
-import { Api, Confirm, Toasts } from './api';
+import { Api, Confirm, McpStatus, Toasts } from './api';
 import { Icon } from './icon';
 
 interface PaletteItem { label: string; hint: string; icon: string; link: string[] }
@@ -31,6 +31,8 @@ export class App {
   protected readonly version = signal(''); // from wails.json via /api/version
   protected readonly theme = signal<'dark' | 'light'>((localStorage.getItem('theme') as 'dark' | 'light') ?? 'dark');
   protected readonly switcherOpen = signal(false);
+  protected readonly mcp = signal<McpStatus | null>(null); // null: backend without MCP status
+  protected readonly mcpOpen = signal(false);
 
   // command palette
   private readonly paletteDlg = viewChild.required<ElementRef<HTMLDialogElement>>('palette');
@@ -49,6 +51,7 @@ export class App {
   constructor() {
     this.api.refreshClusters().catch((e) => this.toasts.err(e));
     this.api.get<{ version: string }>('/version').then((r) => this.version.set(r.version), () => {});
+    this.loadMcp();
     effect(() => {
       document.documentElement.dataset['theme'] = this.theme();
       localStorage.setItem('theme', this.theme());
@@ -71,6 +74,27 @@ export class App {
       const c = this.cluster();
       document.documentElement.style.setProperty('--cluster', c?.color || 'var(--accent)');
     });
+  }
+
+  /** Also on focus and when the panel opens: a restarted backend turns MCP back on (and may have a new token). */
+  @HostListener('window:focus')
+  loadMcp() { this.api.get<McpStatus>('/mcp').then((s) => this.mcp.set(s), () => {}); }
+
+  toggleMcpPanel() {
+    this.mcpOpen.update((o) => !o);
+    if (this.mcpOpen()) this.loadMcp();
+  }
+
+  /** The switch shows the server's answer, not the click: a refused change leaves it as it was. */
+  setMcp(on: boolean) {
+    return this.toasts.guard(async () => this.mcp.set(await this.api.put<McpStatus>('/mcp', { enabled: on })));
+  }
+
+  // user scope: KafkaLens serves every project; the URL quoted for zsh ([::1] is a glob there)
+  claudeCmd(m: McpStatus) { return `claude mcp add --transport http --scope user kafkalens "${m.url}" --header "Authorization: Bearer ${m.token}"`; }
+
+  copy(text: string, what: string) {
+    return this.toasts.guard(async () => { await navigator.clipboard.writeText(text); this.toasts.ok(`${what} copied`); });
   }
 
   toggleTheme() { this.theme.update((t) => (t === 'dark' ? 'light' : 'dark')); }

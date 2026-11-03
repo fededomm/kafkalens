@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -52,38 +50,19 @@ func main() {
 	if err != nil {
 		fatal("listen", "addr", cfg.Server.Addr, "error", err)
 	}
-	// a wildcard address (":8088", "0.0.0.0:8088") would open http://[::]:8088, which localOnly refuses
-	a := ln.Addr().(*net.TCPAddr)
-	host := a.IP.String()
-	if a.IP.IsUnspecified() {
-		host = "localhost"
+	url := listenURL(ln.Addr())
+	gate := newGate(cfg, cfgPath)
+	h, mcp := newHandler(st, gate)
+	if mcp != nil {
+		gate.URL = url + "/mcp"
 	}
-	url := "http://" + net.JoinHostPort(host, strconv.Itoa(a.Port))
-	log.Info().Str("version", version()).Str("mode", "browser").Str("url", url).Str("settings", source).Str("clusters", cfgPath).Msg("KafkaLens started")
+	log.Info().Str("version", version()).Str("mode", "browser").Str("url", url).Str("mcp", gate.URL).Str("settings", source).Str("clusters", cfgPath).Msg("KafkaLens started")
 	if cfg.Server.OpenBrowser {
 		openBrowser(url)
 	}
 	// no WriteTimeout: live tail is a long-lived SSE stream
-	srv := &http.Server{Handler: localOnly(newHandler(st)), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	srv := &http.Server{Handler: localOnly(h), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	fatal("server stopped", "error", srv.Serve(ln))
-}
-
-// localOnly guards the unauthenticated API against other web pages: DNS rebinding (a page on
-// evil.example resolved to 127.0.0.1 still sends Host: evil.example) and cross-site POSTs.
-// Desktop mode opens no port and does not need it.
-func localOnly(h http.Handler) http.Handler {
-	h = http.NewCrossOriginProtection().Handler(h)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host, _, err := net.SplitHostPort(r.Host)
-		if err != nil {
-			host = strings.Trim(r.Host, "[]") // no port
-		}
-		if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			http.Error(w, "forbidden host", http.StatusForbidden)
-			return
-		}
-		h.ServeHTTP(w, r)
-	})
 }
 
 // flagSet reports whether the named flag was given on the command line.

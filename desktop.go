@@ -1,16 +1,19 @@
 //go:build desktop || bindings
 
 // Desktop mode (wails build): the same handler served inside a native window,
-// no TCP port. Wails' asset server buffers whole responses, so live tail uses
+// no TCP port but the MCP one (serveMCP). Wails' asset server buffers whole responses, so live tail uses
 // Wails events instead of SSE, and exports go through a native save dialog.
 package main
 
 import (
 	"context"
 	"errors"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/wailsapp/wails/v2"
@@ -20,6 +23,7 @@ import (
 
 	"kafkalens/internal/config"
 	"kafkalens/internal/kafka"
+	"kafkalens/internal/mcpserver"
 	"kafkalens/internal/store"
 )
 
@@ -80,6 +84,25 @@ func (d *Desktop) SaveFile(name, content string) (string, error) {
 	return path, os.WriteFile(path, []byte(content), 0o644)
 }
 
+// serveMCP opens the desktop app's only TCP port, on loopback, for MCP clients: the window itself
+// talks to the backend in-process. A taken port is not fatal: the sidebar tells why MCP is off.
+// It returns the function closing the listener.
+func serveMCP(addr string, mcp http.Handler, gate *mcpserver.Gate) (stop func()) {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		gate.Err = "cannot listen on " + addr + ": " + err.Error()
+		log.Warn().Err(err).Str("addr", addr).Msg("MCP unavailable")
+		return func() {}
+	}
+	gate.URL = listenURL(ln.Addr()) + "/mcp"
+	log.Info().Str("url", gate.URL).Msg("MCP listening")
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", mcp)
+	srv := &http.Server{Handler: localOnly(harden(mux)), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	go srv.Serve(ln)
+	return func() { srv.Close() }
+}
+
 func main() {
 	settings, _, err := config.Load(defaultSettings, "", false) // embedded config.yaml + KAFKALENS_* env
 	if err != nil {
@@ -102,6 +125,11 @@ func main() {
 	if err != nil {
 		fatal("load clusters", "file", cfg, "error", err)
 	}
+	gate := newGate(settings, cfg)
+	h, mcp := newHandler(st, gate)
+	if mcp != nil && gate.Err == "" {
+		defer serveMCP(settings.MCP.Addr, mcp, gate)()
+	}
 	d := &Desktop{store: st, tails: map[string]context.CancelFunc{}}
 	err = wails.Run(&options.App{
 		Title:            "KafkaLens",
@@ -110,7 +138,7 @@ func main() {
 		MinWidth:         900,
 		MinHeight:        600,
 		BackgroundColour: &options.RGBA{R: 11, G: 14, B: 20, A: 255},
-		AssetServer:      &assetserver.Options{Handler: newHandler(st)},
+		AssetServer:      &assetserver.Options{Handler: h},
 		OnStartup:        func(ctx context.Context) { d.ctx = ctx },
 		Bind:             []any{d},
 	})

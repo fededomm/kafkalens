@@ -16,6 +16,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 
 	"kafkalens/internal/kafka"
+	"kafkalens/internal/mcpserver"
 	"kafkalens/internal/store"
 )
 
@@ -28,7 +29,7 @@ func TestRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := New(st, kafka.NewPool(), "1.2.3")
+	h := New(st, kafka.NewPool(), "1.2.3", &mcpserver.Gate{})
 	call := func(method, path string) (int, string) {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(method, path, strings.NewReader("{}")))
@@ -66,6 +67,29 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
+// The sidebar's MCP switch: on at start, off and on again; locked off by the settings.
+func TestMCPSwitch(t *testing.T) {
+	st, _ := store.OpenStore(filepath.Join(t.TempDir(), "clusters.json"))
+	call := func(gate *mcpserver.Gate, method, body string) (int, string) {
+		rec := httptest.NewRecorder()
+		New(st, kafka.NewPool(), "test", gate).ServeHTTP(rec, httptest.NewRequest(method, "/mcp", strings.NewReader(body)))
+		return rec.Code, rec.Body.String()
+	}
+	g := &mcpserver.Gate{Token: "tok", URL: "http://127.0.0.1:8089/mcp"}
+	if code, body := call(g, "GET", ""); code != http.StatusOK || !strings.Contains(body, `"enabled":true`) || !strings.Contains(body, `"token":"tok"`) {
+		t.Fatalf("status at start: %d %s", code, body)
+	}
+	for _, on := range []bool{false, true} {
+		if code, body := call(g, "PUT", fmt.Sprintf(`{"enabled":%v}`, on)); code != http.StatusOK || g.On() != on || !strings.Contains(body, fmt.Sprintf(`"enabled":%v`, on)) {
+			t.Errorf("switch to %v: %d %s", on, code, body)
+		}
+	}
+	locked := &mcpserver.Gate{Locked: true}
+	if code, body := call(locked, "PUT", `{"enabled":true}`); code != http.StatusConflict || locked.On() || !strings.Contains(body, "mcp.enabled") {
+		t.Errorf("switch on while locked: %d %s", code, body)
+	}
+}
+
 // The UI encodes group names with encodeURIComponent; chi hands RawPath params over still encoded.
 func TestPathParam(t *testing.T) {
 	var got string
@@ -96,7 +120,7 @@ func TestTruncateTopic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := New(st, pool, "test")
+	h := New(st, pool, "test", &mcpserver.Gate{})
 	k, _ := kgo.NewClient(kgo.SeedBrokers(cl.Brokers...))
 	defer k.Close()
 	mk := func(policy string) string {

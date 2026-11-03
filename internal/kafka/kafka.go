@@ -186,6 +186,9 @@ func Browse(ctx context.Context, c store.Cluster, adm *kadm.Client, topic string
 	if err != nil {
 		return BrowseResp{}, err
 	}
+	if o, ok := ends.Lookup(topic, -1); ok && o.Err != nil { // kadm's marker of a missing topic
+		return BrowseResp{}, o.Err
+	}
 	var byTime kadm.ListedOffsets
 	if req.From == "timestamp" {
 		if byTime, err = adm.ListOffsetsAfterMilli(ctx, req.Timestamp, topic); err != nil {

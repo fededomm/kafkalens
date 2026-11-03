@@ -45,6 +45,11 @@ func TestBrowse(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// a missing topic is an error, not an empty page (callers pass free-form names: MCP)
+	if _, err := Browse(ctx, cl, adm, topic+"-missing", BrowseReq{From: "latest", Partition: -1}); err == nil {
+		t.Error("browse of a missing topic succeeded")
+	}
+
 	get := func(req BrowseReq) []Record {
 		t.Helper()
 		r, err := Browse(ctx, cl, adm, topic, req)

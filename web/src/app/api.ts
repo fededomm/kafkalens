@@ -51,6 +51,9 @@ export interface GroupDetail {
   partitions: { topic: string; partition: number; committed: number; end: number; lag: number; member: string | null }[];
 }
 
+/** The MCP endpoint for AI clients; enabled is the sidebar switch, error why it can't run (e.g. port taken). */
+export interface McpStatus { enabled: boolean; locked: boolean; url: string; token: string; error: string }
+
 /** Go methods bound by the Wails desktop build (desktop.go); absent in browser mode. */
 interface DesktopBridge {
   Tail(id: string, topic: string, session: string): Promise<void>;

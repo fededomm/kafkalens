@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,17 +14,20 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 
 	"kafkalens/internal/kafka"
+	"kafkalens/internal/mcpserver"
 	"kafkalens/internal/store"
 )
 
 type API struct {
 	store *store.Store
 	pool  *kafka.Pool
+	mcp   *mcpserver.Gate
 }
 
-// New returns the REST API router, meant to be mounted under /api; version is shown in the UI.
-func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
-	a := &API{store: st, pool: pool}
+// New returns the REST API router, meant to be mounted under /api; version is shown in the UI,
+// gate is the MCP switch of the sidebar.
+func New(st *store.Store, pool *kafka.Pool, version string, gate *mcpserver.Gate) http.Handler {
+	a := &API{store: st, pool: pool, mcp: gate}
 	r := chi.NewRouter()
 	r.Use(logRequests)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) { reply(w, nil, httpErr{http.StatusNotFound, "not found"}) })
@@ -32,6 +36,8 @@ func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 	})
 
 	r.Get("/version", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]string{"version": version}, nil) })
+	r.Get("/mcp", func(w http.ResponseWriter, r *http.Request) { reply(w, a.mcp.Status(), nil) })
+	r.Put("/mcp", handle(a.switchMCP))
 
 	r.Route("/clusters", func(r chi.Router) {
 		r.Get("/", handle(a.listClusters))
@@ -70,6 +76,21 @@ func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 		})
 	})
 	return r
+}
+
+// switchMCP turns the MCP endpoint on or off until the next start.
+func (a *API) switchMCP(r *http.Request, _ cctx) (any, error) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := decode(r, &req); err != nil {
+		return nil, err
+	}
+	if !a.mcp.Available() {
+		return nil, httpErr{http.StatusConflict, cmp.Or(a.mcp.Err, "MCP is turned off in the settings (mcp.enabled)")}
+	}
+	a.mcp.Set(req.Enabled)
+	return a.mcp.Status(), nil
 }
 
 // ---- helpers ----

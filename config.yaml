@@ -16,3 +16,9 @@ clusters: ""
 
 log:
   level: debug           # debug | info | warn | error
+
+# MCP server for AI clients (Claude, editors): read-only tools over the saved clusters.
+# On at every start; the sidebar switch turns it off until the next start.
+mcp:
+  enabled: true          # false: no MCP endpoint at all, the sidebar switch stays off
+  addr: 127.0.0.1:8089   # desktop app only: its MCP listener (browser mode serves /mcp on server.addr)

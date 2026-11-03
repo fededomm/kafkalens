@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-03
+
+### Added
+
+- **MCP server.** AI clients such as Claude Code, Claude Desktop (through `mcp-remote`), VS Code or Cursor can read your clusters: list clusters, topics and consumer groups, describe a topic or a group with its lag, read broker configs and browse messages with the UI's filters. The tools only read. Three prompts chain them: `cluster_health`, `inspect_topic`, `diagnose_lag`. It is on at every start; **MCP server** in the sidebar turns it off until the next start and copies the URL, the token and the `claude mcp add` command. Endpoint: `http://127.0.0.1:8089/mcp` in the desktop app (its only TCP port, loopback), `/mcp` next to the UI in browser mode. Clients send a bearer token kept in `mcp-token` next to `clusters.json`. Answers are sized for a model: at most 200 messages per browse (20 by default), keys, values and headers cut at 4 KB, lists filtered and capped, sensitive configs never sent. `mcp.enabled: false` (or `KAFKALENS_MCP_ENABLED=false`) turns it off for good.
+
 ## [0.6.2] - 2026-11-03
 
 ### Fixed
@@ -109,6 +115,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.7.0]: https://github.com/fededomm/kafkalens/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/fededomm/kafkalens/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/fededomm/kafkalens/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fededomm/kafkalens/compare/v0.5.0...v0.6.0

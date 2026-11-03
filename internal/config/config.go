@@ -16,11 +16,17 @@ type Config struct {
 	Server   Server `mapstructure:"server"`
 	Clusters string `mapstructure:"clusters"` // "" = default location, resolved by the caller
 	Log      Log    `mapstructure:"log"`
+	MCP      MCP    `mapstructure:"mcp"`
 }
 
 type Server struct {
 	Addr        string `mapstructure:"addr"`
 	OpenBrowser bool   `mapstructure:"openBrowser"`
+}
+
+type MCP struct {
+	Enabled bool   `mapstructure:"enabled"`
+	Addr    string `mapstructure:"addr"`
 }
 
 type Log struct {

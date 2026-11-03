@@ -43,6 +43,37 @@
 }
 .palette-btn span { flex: 1; text-align: left; }
 .palette-btn:hover { color: var(--text); border-color: var(--border-strong); }
+/* MCP switch and connection details */
+.mcp { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.mcp-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; }
+.mcp-btn {
+  flex: 1; display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 0; border-radius: 6px;
+  background: none; color: var(--text-2); font: 13px var(--font); cursor: pointer; text-align: left; white-space: nowrap;
+}
+.mcp-btn:hover { color: var(--text); }
+.mcp-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mcp-state { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.mcp-state.on { color: var(--ok); }
+.mcp-state.err { color: var(--err); }
+.mcp-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 10px 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-3); }
+.mcp-panel p { margin: 0; }
+.mcp-panel p.err { color: var(--err); word-break: break-word; }
+.mcp-copy { display: flex; align-items: center; gap: 6px; }
+.mcp-copy > span { width: 38px; flex: none; }
+.mcp-copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-2); }
+.switch {
+  appearance: none; flex: none; position: relative; width: 30px; height: 17px; margin: 0; border-radius: 9px;
+  background: var(--border-strong); cursor: pointer; transition: background 0.15s;
+}
+.switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #fff; transition: translate 0.15s;
+}
+.switch:checked { background: var(--ok); }
+.switch:checked::after { translate: 13px 0; }
+.switch:disabled { opacity: 0.5; cursor: default; }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .side-foot { display: flex; justify-content: space-between; align-items: center; }
 .version { padding: 0 10px; margin-top: -6px; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
@@ -84,5 +115,6 @@ dialog.palette { width: min(620px, calc(100vw - 32px)); margin-top: 12vh; }
   .side { flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--border); }
   .version { margin-top: 0; }
   .nav { grid-auto-flow: column; }
+  .mcp { width: 260px; } /* opening the panel must not move it to a row of its own */
   .spacer, .palette-btn { display: none; }
 }

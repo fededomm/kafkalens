@@ -16,7 +16,7 @@ dev:                  ## backend on :8088 + ng serve on :4200 (proxied)
 kafka:                ## local Kafka on localhost:9092
 	docker compose up -d
 
-# Desktop app (Wails): same UI and API in a native window, no TCP port.
+# Desktop app (Wails): same UI and API in a native window; its only TCP port is MCP on loopback.
 # macOS must be built on a Mac: see .github/workflows/desktop.yml.
 WAILS ?= $(shell go env GOPATH)/bin/wails
 WAILS_FLAGS = -trimpath -skipbindings

@@ -28,6 +28,7 @@ The binaries are not code-signed yet. Windows SmartScreen: *More info → Run an
 - **Produce** — key/null key, value with JSON validation/format, headers, target partition, N copies; optional per-message templates (`{{uuid}}`, `{{i}}`, `{{seq "a" "b"}}`, …)
 - **Topic admin** — partitions (leader/replicas/ISR/offsets), add partitions, edit/reset configs, consumers with lag
 - **Consumer groups** — state, members, lag per topic/partition, auto-refresh, reset offsets (earliest/latest/time/offset), delete
+- **MCP server** — AI clients (Claude, editors) read clusters, topics, messages and consumer lag through read-only tools; on by default, switched off from the sidebar (see [MCP](#mcp))
 - **Ctrl+K** command palette, dark/light theme, keyboard navigation in the message list
 
 ## Run
@@ -38,16 +39,90 @@ make build && ./bin/kafkalens          # opens http://127.0.0.1:8088
 ./bin/kafkalens -settings /path/config.yaml
 ```
 
-**Settings.** Startup settings live in [`config.yaml`](config.yaml): listen address, whether to open the browser, the clusters file and the log level. They are read with [viper](https://github.com/spf13/viper), each layer overriding the previous one: the built-in defaults (the embedded `config.yaml`), then `./config.yaml` or the file given with `-settings`, then `KAFKALENS_<SECTION>_<KEY>` environment variables (e.g. `KAFKALENS_SERVER_ADDR`, `KAFKALENS_LOG_LEVEL`), then the `-addr`, `-config` and `-no-open` flags. Keys left out keep their default and unknown keys are rejected. The desktop app uses the embedded file plus the environment: edit `config.yaml` and rebuild, or set the variables.
+**Settings.** Startup settings live in [`config.yaml`](config.yaml): listen address, whether to open the browser, the clusters file, the log level and the [MCP](#mcp) server. They are read with [viper](https://github.com/spf13/viper), each layer overriding the previous one: the built-in defaults (the embedded `config.yaml`), then `./config.yaml` or the file given with `-settings`, then `KAFKALENS_<SECTION>_<KEY>` environment variables (e.g. `KAFKALENS_SERVER_ADDR`, `KAFKALENS_LOG_LEVEL`), then the `-addr`, `-config` and `-no-open` flags. Keys left out keep their default and unknown keys are rejected. The desktop app uses the embedded file plus the environment: edit `config.yaml` and rebuild, or set the variables.
 
 Connections are stored in `~/.config/kafkalens/clusters.json` (mode 0600, passwords and client keys in plain text).
 KafkaLens is a development tool: the API has no authentication and only answers requests addressed to `localhost` or a loopback IP, so keep it on loopback (see [SECURITY.md](SECURITY.md)).
 
 **Logs.** The browser mode logs to the console. The desktop app writes `kafkalens.log` next to `clusters.json` (`~/.config/kafkalens/` on Linux, `~/Library/Application Support/kafkalens/` on macOS, `%AppData%\kafkalens\` on Windows); past 10 MiB the old file is kept as `kafkalens.log.1` at the next start. Each API call that fails or changes something is logged with its status, duration and error; reads are logged too at `debug`, the default; set `log.level: info` in `config.yaml` to skip them (`warn` and `error` are quieter still). `KAFKALENS_LOG_LEVEL` overrides it, which is the way to change the level of an installed desktop app without rebuilding. Request bodies are never logged.
 
+## MCP
+
+KafkaLens is also an [MCP](https://modelcontextprotocol.io) server, so AI clients can look at your clusters: list clusters, topics and consumer groups, describe a topic or a group with its lag, read broker configs and browse messages (with the same filters as the UI). The tools only read: nothing is produced, deleted or reset. Three prompts chain them: `cluster_health`, `inspect_topic` and `diagnose_lag` (slash commands in Claude Code).
+
+It is on at every start. **MCP server** in the sidebar turns it off until the next start and shows the endpoint and the token to copy:
+
+| Mode | Endpoint |
+|---|---|
+| Desktop app | `http://127.0.0.1:8089/mcp` (`mcp.addr`) |
+| Browser mode | `http://127.0.0.1:8088/mcp`, next to the UI |
+
+Clients send the token as `Authorization: Bearer <token>`. It is created on first start in `mcp-token` next to `clusters.json` (mode 0600: `~/.config/kafkalens/` on Linux, `~/Library/Application Support/kafkalens/` on macOS, `%AppData%\kafkalens\` on Windows) and stays the same across restarts; delete the file to get a new one. Copy it from the sidebar.
+
+The examples below use the desktop app's URL; in browser mode use `http://127.0.0.1:8088/mcp`. KafkaLens must be running when the client connects. A `401` means a missing or wrong token, a `503` that the sidebar switch is off.
+
+### Claude Code
+
+**Copy Claude Code command** in the sidebar copies this line with your token; run it once:
+
+```sh
+claude mcp add --transport http --scope user kafkalens "http://127.0.0.1:8089/mcp" --header "Authorization: Bearer <token>"
+```
+
+`--scope user` makes it available in every project. Keep `--header` after the URL: it takes several values and would swallow the name and the URL. Check with `claude mcp list` (`kafkalens: … ✔ Connected`) or `/mcp` in a session, where the prompts show up as slash commands.
+
+To share it in a project without committing the token, put it in `.mcp.json` at the project root and export `KAFKALENS_MCP_TOKEN` before starting `claude`:
+
+```json
+{ "mcpServers": { "kafkalens": {
+  "type": "http", "url": "http://127.0.0.1:8089/mcp",
+  "headers": { "Authorization": "Bearer ${KAFKALENS_MCP_TOKEN}" } } } }
+```
+
+### Claude Desktop
+
+Claude Desktop can't reach KafkaLens directly: its custom connectors (**Settings → Connectors**) are called from Anthropic's servers, which can't see `127.0.0.1`, and `claude_desktop_config.json` only starts local commands. The [`mcp-remote`](https://github.com/geelen/mcp-remote) bridge (needs Node) is that command. **Settings → Developer → Edit Config** opens the file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows); add:
+
+```json
+{ "mcpServers": { "kafkalens": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "http://127.0.0.1:8089/mcp", "--transport", "http-only", "--header", "Authorization:${AUTH_HEADER}"],
+  "env": { "AUTH_HEADER": "Bearer <token>" } } } }
+```
+
+The token goes in `env`, with no space after `Authorization:`, because Claude Desktop on Windows splits arguments at spaces. Quit Claude Desktop completely (not just the window) and start it again.
+
+### Cursor
+
+Add KafkaLens to `~/.cursor/mcp.json` (every project; `%USERPROFILE%\.cursor\mcp.json` on Windows), or `.cursor/mcp.json` in one project, and restart Cursor:
+
+```json
+{ "mcpServers": { "kafkalens": {
+  "url": "http://127.0.0.1:8089/mcp",
+  "headers": { "Authorization": "Bearer <token>" } } } }
+```
+
+Then turn it on in **Customize → MCPs** (**Cursor Settings → Tools & MCP** in older versions); **MCP Logs** in the Output panel shows connection errors. `"Bearer ${env:KAFKALENS_MCP_TOKEN}"` reads the token from the environment, but only if Cursor was started from a shell that has it. If Cursor asks to authenticate, the token is wrong: fix it instead of clicking **Authenticate**, then remove and re-add the server.
+
+### Antigravity
+
+Add KafkaLens to `~/.gemini/config/mcp_config.json` (`%USERPROFILE%\.gemini\config\mcp_config.json` on Windows), shared by the Antigravity app, IDE and `agy` CLI. In the IDE it opens from **… → MCP Servers → Manage MCP Servers → View raw config**:
+
+```json
+{ "mcpServers": { "kafkalens": {
+  "serverUrl": "http://127.0.0.1:8089/mcp",
+  "headers": { "Authorization": "Bearer <token>" } } } }
+```
+
+Use `serverUrl`, not `url`, and paste the token itself: Antigravity doesn't expand `${…}` variables in headers. Then **Refresh** in **Settings → Customizations → Installed MCP Servers**. With the CLI, `agy mcp add --header "Authorization: Bearer <token>" kafkalens http://127.0.0.1:8089/mcp` writes the same entry (options before the name), and `/mcp` inside `agy` shows whether it connected.
+
+### What reaches the model
+
+Message keys, values and headers reach the AI provider: each key, value and header is cut at 4 KB (50 headers at most) and a browse returns at most 200 messages (20 by default), and sensitive configs are never sent. Set `mcp.enabled: false` (or `KAFKALENS_MCP_ENABLED=false`) to turn MCP off for good: no endpoint, no port.
+
 ## Desktop app (Wails)
 
-The same UI and API in a native window: no browser, no TCP port. Built with [Wails v2](https://wails.io) (`desktop.go`, build tag `desktop`); the browser mode above stays pure Go.
+The same UI and API in a native window: no browser, and no TCP port but the MCP one on loopback. Built with [Wails v2](https://wails.io) (`desktop.go`, build tag `desktop`); the browser mode above stays pure Go.
 
 ```sh
 go install github.com/wailsapp/wails/v2/cmd/wails@$(go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)   # from the repo root: same version as go.mod

@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"kafkalens/internal/kafka"
+	"kafkalens/internal/mcpserver"
 	"kafkalens/internal/store"
 )
 
@@ -22,7 +23,7 @@ func TestRequestLog(t *testing.T) {
 	defer func() { log.Logger = prev }()
 
 	st, _ := store.OpenStore(filepath.Join(t.TempDir(), "clusters.json"))
-	h := New(st, kafka.NewPool(), "1.2.3")
+	h := New(st, kafka.NewPool(), "1.2.3", &mcpserver.Gate{})
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/c/nope/topics", nil))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/clusters", nil))
 

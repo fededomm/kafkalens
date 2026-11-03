@@ -22,7 +22,8 @@ func TestLoad(t *testing.T) {
 	}
 
 	c, src, err := Load(defaults, "", false) // Load also rejects an invalid log.level
-	if err != nil || src != "built-in defaults" || c.Server.Addr != "127.0.0.1:8088" || !c.Server.OpenBrowser || c.Clusters != "" {
+	if err != nil || src != "built-in defaults" || c.Server.Addr != "127.0.0.1:8088" || !c.Server.OpenBrowser || c.Clusters != "" ||
+		!c.MCP.Enabled || c.MCP.Addr != "127.0.0.1:8089" {
 		t.Fatalf("defaults: %+v %q %v", c, src, err)
 	}
 
@@ -48,12 +49,14 @@ func TestLoad(t *testing.T) {
 	// environment beats the file
 	t.Setenv("KAFKALENS_LOG_LEVEL", "warn")
 	t.Setenv("KAFKALENS_SERVER_ADDR", "127.0.0.1:9999")
+	t.Setenv("KAFKALENS_MCP_ENABLED", "false")
 	c, _, err = Load(defaults, write("log:\n  level: debug\n"), false)
-	if err != nil || c.Log.Level != "warn" || c.Server.Addr != "127.0.0.1:9999" {
+	if err != nil || c.Log.Level != "warn" || c.Server.Addr != "127.0.0.1:9999" || c.MCP.Enabled {
 		t.Errorf("env override: %+v %v", c, err)
 	}
 	os.Unsetenv("KAFKALENS_LOG_LEVEL")
 	os.Unsetenv("KAFKALENS_SERVER_ADDR")
+	os.Unsetenv("KAFKALENS_MCP_ENABLED")
 
 	for in, want := range map[string]string{
 		"server:\n  adr: x\n":     "adr",

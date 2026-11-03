@@ -52,6 +52,6 @@ func logRequests(next http.Handler) http.Handler {
 		}
 		// reads as: 18:05:01.375 WRN DELETE /api/c/ro/topics/x error="cluster is read-only" ms=0 status=403
 		log.WithLevel(lvl).Int("status", sw.status).Int64("ms", time.Since(start).Milliseconds()).
-			Err(sw.err).Msg(r.Method + " " + r.URL.Path)
+			Err(sw.err).Msg(r.Method + " " + r.URL.EscapedPath()) // escaped: a %0A in a name can't forge a line
 	})
 }

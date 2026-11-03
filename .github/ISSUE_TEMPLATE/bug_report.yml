@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: KafkaLens version
-      placeholder: v0.6.0
+      placeholder: v0.7.0
     validations:
       required: true
   - type: dropdown
