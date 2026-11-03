@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, inject, input, linkedSignal, resource, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, linkedSignal, resource, signal, viewChild, WritableSignal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Api, Confirm, Favorites, Folders, Toasts, TopicRow } from '../api';
@@ -22,6 +22,12 @@ const PAGE = 200;
       <p class="sub">{{ visible().length | num }} of {{ (topics() ?? []).length | num }} topics</p>
     </div>
     <div class="row">
+      @if (selected().length) {
+        <button class="btn danger" (click)="truncate(selected(), selected().length + ' topics')" [disabled]="readOnly() || busy()"
+          title="Delete all messages of the checked topics, keep the topics and their configuration">
+          <app-icon name="trash" /> Delete messages ({{ selected().length | num }})
+        </button>
+      }
       <button class="btn" (click)="res.reload()" [disabled]="res.isLoading()" aria-label="Refresh">
         @if (res.isLoading()) { <span class="spin"></span> } @else { <app-icon name="refresh" /> }
       </button>
@@ -43,6 +49,8 @@ const PAGE = 200;
               @for (f of folderNames(); track f) { <option [value]="f">{{ f }}</option> }
             </select>
             @if (folder()) {
+              <button class="btn ghost sm" (click)="truncate(folderTopics(), folder())" [disabled]="readOnly() || busy() || !folderTopics().length"
+                title="Delete all messages of every topic in this folder, keep the topics">Delete messages</button>
               <button class="btn ghost icon sm" (click)="dropFolder()" title="Delete folder" [attr.aria-label]="'Delete folder ' + folder()"><app-icon name="trash" /></button>
             }
           }
@@ -59,6 +67,8 @@ const PAGE = 200;
       <table class="t">
         <thead>
           <tr>
+            <th class="sel"><label class="check"><input type="checkbox" [checked]="allSel()" (change)="mark(sel, selectable(), $any($event.target).checked)"
+              [disabled]="readOnly() || !selectable().length" aria-label="Check all topics shown" /></label></th>
             <th class="fav"></th>
             <th class="sortable" [attr.aria-sort]="ariaSort('name')"><button type="button" (click)="sortBy('name')">Name<span class="arrow">{{ arrow('name') }}</span></button></th>
             <th class="sortable num" [attr.aria-sort]="ariaSort('partitions')"><button type="button" (click)="sortBy('partitions')">Partitions<span class="arrow">{{ arrow('partitions') }}</span></button></th>
@@ -71,6 +81,10 @@ const PAGE = 200;
         <tbody>
           @for (t of shown(); track t.name) {
             <tr class="clickable" (click)="open(t)">
+              <td class="sel" (click)="$event.stopPropagation()">
+                <label class="check"><input type="checkbox" [checked]="sel().has(t.name)" (change)="mark(sel, [t.name])" [disabled]="readOnly() || t.internal"
+                  [attr.aria-label]="'Check ' + t.name" /></label>
+              </td>
               <td class="fav">
                 <button class="btn ghost icon sm star" [class.on]="fav.has(id(), t.name)" (click)="$event.stopPropagation(); fav.toggle(id(), t.name)"
                   [attr.aria-pressed]="fav.has(id(), t.name)" [attr.aria-label]="'Favorite ' + t.name"><app-icon name="star" /></button>
@@ -96,13 +110,13 @@ const PAGE = 200;
             </tr>
           } @empty {
             @if (res.isLoading() && !topics()) {
-              @for (i of [1, 2, 3, 4, 5]; track i) { <tr><td colspan="7"><div class="skeleton"></div></td></tr> }
+              @for (i of [1, 2, 3, 4, 5]; track i) { <tr><td colspan="8"><div class="skeleton"></div></td></tr> }
             } @else {
-              <tr><td colspan="7"><div class="empty"><app-icon name="inbox" /><strong>No topics</strong><span>Nothing matches the current filter.</span></div></td></tr>
+              <tr><td colspan="8"><div class="empty"><app-icon name="inbox" /><strong>No topics</strong><span>Nothing matches the current filter.</span></div></td></tr>
             }
           }
           @if (shown().length < visible().length) {
-            <tr class="more"><td colspan="7">
+            <tr class="more"><td colspan="8">
               <button class="btn ghost sm" (click)="limit.set(limit() + PAGE * 5)">
                 Show more <span class="dim">({{ shown().length | num }} of {{ visible().length | num }})</span>
               </button>
@@ -154,10 +168,10 @@ const PAGE = 200;
             <input class="input" [(ngModel)]="pickQ" [ngModelOptions]="{ standalone: true }" (keydown.enter)="$event.preventDefault()"
               placeholder="Filter…" aria-label="Filter topics to add" autocomplete="off" />
             @if (matching().length) {
-              <label class="check all"><input type="checkbox" [checked]="allPicked()" (change)="pickAll($any($event.target).checked)" /> Select all ({{ matching().length | num }})</label>
+              <label class="check all"><input type="checkbox" [checked]="allPicked()" (change)="mark(picked, matching(), $any($event.target).checked)" /> Select all ({{ matching().length | num }})</label>
             }
             @for (t of pickable(); track t) {
-              <label class="check"><input type="checkbox" [checked]="picked().has(t)" (change)="togglePick(t)" /> <span class="mono">{{ t }}</span></label>
+              <label class="check"><input type="checkbox" [checked]="picked().has(t)" (change)="mark(picked, [t])" /> <span class="mono">{{ t }}</span></label>
             } @empty { <span class="hint">No topics match</span> }
             @if (matching().length > PAGE) { <span class="hint">First {{ PAGE }} shown, filter to find more</span> }
           </div>
@@ -179,8 +193,8 @@ const PAGE = 200;
   styles: `
 .grow { flex: 1; max-width: 420px; }
 .sm-badge { margin-left: 8px; height: 18px; font-size: 10.5px; }
-.acts, .fav { width: 1%; }
-td.fav { padding-right: 0; }
+.acts, .fav, .sel { width: 1%; }
+td.fav, .sel { padding-right: 0; }
 .healthy { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
 .healthy .dot { color: var(--ok); }
 .more td { text-align: center; padding: 10px; }
@@ -237,6 +251,15 @@ export class TopicsPage {
   });
   protected readonly pickable = computed(() => this.matching().slice(0, PAGE));
   protected readonly allPicked = computed(() => this.matching().every((t) => this.picked().has(t)));
+  // topics checked for bulk deletes; checks outside the filter stay, the confirmation lists them
+  protected readonly sel = linkedSignal(() => (this.id(), new Set<string>()));
+  // checked topics still listed: a reload or a delete drops the others
+  protected readonly selected = computed(() => (this.topics() ?? []).filter((t) => this.sel().has(t.name)));
+  protected readonly selectable = computed(() => this.visible().filter((t) => !t.internal).map((t) => t.name));
+  protected readonly allSel = computed(() => this.selectable().length > 0 && this.selectable().every((t) => this.sel().has(t)));
+  // the whole folder, whatever the search and favorites filters
+  protected readonly folderTopics = computed(() => (this.topics() ?? []).filter((t) => !t.internal && this.folders.has(this.id(), this.folder(), t.name)));
+  protected readonly busy = signal(false);
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
 
   protected readonly visible = computed(() => {
@@ -296,13 +319,9 @@ export class TopicsPage {
     this.prefixDlg().nativeElement.showModal();
   }
 
-  /** Checks or unchecks every topic matching the filters, beyond the ones shown. */
-  pickAll(on: boolean) {
-    this.picked.update((s) => { const n = new Set(s); for (const t of this.matching()) if (on) n.add(t); else n.delete(t); return n; });
-  }
-
-  togglePick(t: string) {
-    this.picked.update((s) => { const n = new Set(s); if (!n.delete(t)) n.add(t); return n; });
+  /** Checks (on) or unchecks topics in a set of checked ones, beyond the rows shown; without on, flips each. */
+  mark(s: WritableSignal<Set<string>>, topics: string[], on?: boolean) {
+    s.update((x) => { const n = new Set(x); for (const t of topics) if (on ?? !n.has(t)) n.add(t); else n.delete(t); return n; });
   }
 
   createPrefixFolder() {
@@ -319,6 +338,26 @@ export class TopicsPage {
   async dropFolder() {
     const f = this.folder();
     if (await this.confirm.ask('Delete folder', `Delete the folder "${f}"? Its topics are not touched.`, 'Delete folder')) this.folders.remove(this.id(), f);
+  }
+
+  /** Deletes every message of the topics in one call, keeping the topics; typed is what the user types to confirm. */
+  async truncate(list: TopicRow[], typed: string) {
+    const n = list.reduce((sum, t) => sum + t.messages, 0);
+    const names = list.slice(0, 5).map((t) => t.name).join(', ') + (list.length > 5 ? ` and ${list.length - 5} more` : '');
+    const text = `This permanently deletes about ${n.toLocaleString()} messages of ${list.length} topics: ${names}. The topics and their configuration stay.`;
+    if (!(await this.confirm.ask('Delete messages', text, 'Delete messages', typed))) return;
+    return this.toasts.guard(async () => {
+      try {
+        const res = await this.api.post<Record<string, string>>(`/c/${this.id()}/truncate`, { topics: list.map((t) => t.name) });
+        const failed = Object.entries(res);
+        if (!failed.length) this.toasts.ok(`Deleted the messages of ${list.length} topics`);
+        // compacted topics land here: Kafka refuses DeleteRecords without cleanup.policy delete
+        else this.toasts.err(`${failed.length} of ${list.length} topics not emptied: ${failed.slice(0, 3).map(([t, e]) => `${t} (${e})`).join(', ')}${failed.length > 3 ? '…' : ''}`);
+        this.mark(this.sel, list.map((t) => t.name).filter((t) => !(t in res)), false); // failed ones stay checked for a retry
+      } finally {
+        this.res.reload(); // message counts, also after a partial failure
+      }
+    }, this.busy);
   }
 
   async askDelete(t: TopicRow) {

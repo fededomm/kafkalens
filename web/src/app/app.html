@@ -87,7 +87,7 @@
     <div class="dlg-head"><div><h2>{{ confirm.req()?.title }}</h2><p>{{ confirm.req()?.text }}</p></div></div>
     @if (confirm.req()?.typed) {
       <div class="dlg-body">
-        <label class="field"><span>Type the name to confirm</span>
+        <label class="field"><span>Type <b class="mono">{{ confirm.req()?.typed }}</b> to confirm</span>
           <input class="input mono" name="typed" [(ngModel)]="confirm.typed" autocomplete="off" />
         </label>
       </div>

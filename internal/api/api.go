@@ -60,6 +60,7 @@ func New(st *store.Store, pool *kafka.Pool, version string) http.Handler {
 				r.Post("/topics", handle(a.createTopic))
 				r.Delete("/topics/{topic}", handle(a.deleteTopic))
 				r.Delete("/topics/{topic}/records", handle(a.truncateTopic))
+				r.Post("/truncate", handle(a.truncateTopics))
 				r.Put("/topics/{topic}/configs", handle(a.alterTopicConfigs))
 				r.Post("/topics/{topic}/partitions", handle(a.addPartitions))
 				r.Post("/topics/{topic}/produce", handle(a.produce))

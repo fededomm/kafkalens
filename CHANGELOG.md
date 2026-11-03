@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-03
+
+### Added
+
+- **Delete the messages of many topics at once.** Check topics in the Topics list (the header box checks every topic shown) and use **Delete messages**, or pick a folder and use its **Delete messages** to empty every topic in it. One call to Kafka for all of them, after typing what the dialog asks; the topics and their configuration stay. Topics Kafka refuses (e.g. compacted) are reported and stay checked.
+
 ## [0.6.0] - 2026-11-02
 
 ### Added
@@ -97,6 +103,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.6.1]: https://github.com/fededomm/kafkalens/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/fededomm/kafkalens/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/fededomm/kafkalens/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/fededomm/kafkalens/compare/v0.3.1...v0.4.0

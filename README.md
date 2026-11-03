@@ -23,7 +23,7 @@ The binaries are not code-signed yet. Windows SmartScreen: *More info → Run an
 
 - **Clusters** — multiple connections, PLAINTEXT/TLS (custom CA, mTLS), SASL PLAIN/SCRAM-256/512, connection test, color tag, **read-only mode** (blocks writes from the UI; a guard against mistakes, not access control — restrict the SASL user with broker ACLs)
 - **Overview** — brokers, controller, partition leadership, under-replicated/offline partitions, broker configs
-- **Topics** — search (regex), sort, message counts, health, ★ favorites pinned on top (per cluster, stored in the browser), folders to group topics, create (partitions/RF/retention/cleanup), delete with typed confirmation
+- **Topics** — search (regex), sort, message counts, health, ★ favorites pinned on top (per cluster, stored in the browser), folders to group topics, delete the messages of checked topics or a whole folder, create (partitions/RF/retention/cleanup), delete with typed confirmation
 - **Messages** — browse newest/oldest/from offset/from time, per partition, server-side filter on key/value/headers, JSON pretty-print + highlighting, headers, copy, export JSON, **live tail** (SSE), re-send a message
 - **Produce** — key/null key, value with JSON validation/format, headers, target partition, N copies; optional per-message templates (`{{uuid}}`, `{{i}}`, `{{seq "a" "b"}}`, …)
 - **Topic admin** — partitions (leader/replicas/ISR/offsets), add partitions, edit/reset configs, consumers with lag

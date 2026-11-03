@@ -37,7 +37,7 @@ func TestRoutes(t *testing.T) {
 
 	reads := []string{"GET /overview", "GET /brokers/1/configs", "GET /topics", "GET /topics/t", "POST /topics/t/browse",
 		"GET /topics/t/tail", "GET /groups", "GET /groups/g"}
-	writes := []string{"POST /topics", "DELETE /topics/t", "DELETE /topics/t/records", "PUT /topics/t/configs", "POST /topics/t/partitions",
+	writes := []string{"POST /topics", "DELETE /topics/t", "DELETE /topics/t/records", "POST /truncate", "PUT /topics/t/configs", "POST /topics/t/partitions",
 		"POST /topics/t/produce", "POST /groups/g/reset", "DELETE /groups/g"}
 	for _, rt := range append(reads, writes...) {
 		m, p, _ := strings.Cut(rt, " ")
@@ -99,7 +99,7 @@ func TestTruncateTopic(t *testing.T) {
 	h := New(st, pool, "test")
 	k, _ := kgo.NewClient(kgo.SeedBrokers(cl.Brokers...))
 	defer k.Close()
-	truncate := func(policy string) (string, int) {
+	mk := func(policy string) string {
 		topic := fmt.Sprintf("kafkalens-test-%d", time.Now().UnixNano())
 		if _, err := adm.CreateTopic(ctx, 2, 1, map[string]*string{"cleanup.policy": &policy}, topic); err != nil {
 			t.Fatal(err)
@@ -110,23 +110,38 @@ func TestTruncateTopic(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		return topic
+	}
+	call := func(method, path, body string) (int, string) {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("DELETE", "/c/"+cl.ID+"/topics/"+topic+"/records", nil))
-		return topic, rec.Code
+		h.ServeHTTP(rec, httptest.NewRequest(method, "/c/"+cl.ID+path, strings.NewReader(body)))
+		return rec.Code, rec.Body.String()
+	}
+	empty := func(topic string) {
+		starts, _ := adm.ListStartOffsets(ctx, topic)
+		ends, _ := adm.ListEndOffsets(ctx, topic)
+		ends.Each(func(e kadm.ListedOffset) {
+			if s, _ := starts.Lookup(topic, e.Partition); s.Offset != e.Offset {
+				t.Errorf("%s partition %d: start %d, end %d", topic, e.Partition, s.Offset, e.Offset)
+			}
+		})
 	}
 
-	topic, code := truncate("delete")
-	if code != http.StatusOK {
-		t.Fatalf("truncate: status %d", code)
+	topic := mk("delete")
+	if code, body := call("DELETE", "/topics/"+topic+"/records", ""); code != http.StatusOK {
+		t.Fatalf("truncate: %d %s", code, body)
 	}
-	starts, _ := adm.ListStartOffsets(ctx, topic)
-	ends, _ := adm.ListEndOffsets(ctx, topic)
-	ends.Each(func(e kadm.ListedOffset) {
-		if s, _ := starts.Lookup(topic, e.Partition); s.Offset != e.Offset {
-			t.Errorf("partition %d: start %d, end %d", e.Partition, s.Offset, e.Offset)
-		}
-	})
-	if _, code := truncate("compact"); code == http.StatusOK {
+	empty(topic)
+	if code, _ := call("DELETE", "/topics/"+mk("compact")+"/records", ""); code == http.StatusOK {
 		t.Error("truncate of a compacted topic succeeded: the UI wrongly disables it")
 	}
+
+	// bulk: the compacted topic fails alone, the others are still emptied
+	a, b, cp := mk("delete"), mk("delete"), mk("compact")
+	code, body := call("POST", "/truncate", fmt.Sprintf(`{"topics":[%q,%q,%q]}`, a, b, cp))
+	if code != http.StatusOK || strings.Contains(body, a) || strings.Contains(body, b) || !strings.Contains(body, cp) {
+		t.Fatalf("bulk truncate: %d %s", code, body)
+	}
+	empty(a)
+	empty(b)
 }

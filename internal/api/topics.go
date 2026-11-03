@@ -154,6 +154,42 @@ func (a *API) truncateTopic(r *http.Request, c cctx) (any, error) {
 	return nil, err
 }
 
+// truncateTopics empties many topics (a selection, a folder) in one pass and replies with the error of each topic it failed on.
+func (a *API) truncateTopics(r *http.Request, c cctx) (any, error) {
+	var req struct {
+		Topics []string `json:"topics"`
+	}
+	if err := decode(r, &req); err != nil {
+		return nil, err
+	}
+	if len(req.Topics) == 0 {
+		return nil, bad("no topics given")
+	}
+	ends, err := c.adm.ListEndOffsets(r.Context(), req.Topics...)
+	if err != nil {
+		return nil, err
+	}
+	failed := map[string]string{}
+	ends.Each(func(o kadm.ListedOffset) {
+		if o.Err != nil {
+			failed[o.Topic] = o.Err.Error()
+		}
+	})
+	for t := range failed {
+		delete(ends, t) // a topic with an unlisted partition is left whole, not emptied halfway
+	}
+	res, err := c.adm.DeleteRecords(r.Context(), ends.Offsets())
+	if err != nil {
+		return nil, err
+	}
+	res.Each(func(d kadm.DeleteRecordsResponse) {
+		if d.Err != nil {
+			failed[d.Topic] = d.Err.Error()
+		}
+	})
+	return failed, nil
+}
+
 func (a *API) alterTopicConfigs(r *http.Request, c cctx) (any, error) {
 	var req map[string]*string // nil value = reset to default
 	if err := decode(r, &req); err != nil {
