@@ -8,7 +8,7 @@ import { Icon } from '../../../icon';
   selector: 'app-topic-consumers',
   imports: [RouterLink, NumPipe, Icon],
   template: `
-<section class="card">
+<section class="card fit">
   @if (error(); as e) { <div class="alert err m"><app-icon name="alert" /> {{ e }}</div> }
   <div class="table-wrap">
     <table class="t">

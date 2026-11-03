@@ -1,2 +1,5 @@
-.topic-page { gap: 16px; }
+/* fills the window below the banner and never scrolls: the cards do */
+:host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.topic-page { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+app-topic-partitions, app-topic-consumers, app-config-table { display: contents; }
 .facts { margin-top: 2px; }

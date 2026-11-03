@@ -8,7 +8,7 @@ import { Icon } from '../../../icon';
   selector: 'app-topic-partitions',
   imports: [FormsModule, NumPipe, Icon],
   template: `
-<section class="card">
+<section class="card fit">
   <div class="card-head">
     <h2>Partitions</h2>
     <button class="btn sm" (click)="openParts()" [disabled]="readOnly()"><app-icon name="plus" /> Add partitions</button>

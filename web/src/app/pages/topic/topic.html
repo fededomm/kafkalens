@@ -45,7 +45,7 @@
       <app-topic-partitions [partitions]="detail()?.partitions ?? []" [total]="totalMessages()" [readOnly]="readOnly()" [base]="base()" (changed)="res.reload()" />
     }
     @case ('configs') {
-      <section class="card">
+      <section class="card fit">
         @if (detail(); as d) {
           <app-config-table [configs]="d.configs" [editable]="!readOnly()" (changed)="setConfig($event)">
             <button class="btn sm" (click)="exportConfig()" title="Download partitions, replication factor and topic config overrides as JSON"><app-icon name="download" /> Export config</button>

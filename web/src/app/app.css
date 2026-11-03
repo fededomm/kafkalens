@@ -3,7 +3,7 @@
   display: flex; flex-direction: column; gap: 14px; padding: 16px 12px;
   background: var(--bg-elev); border-right: 1px solid var(--border); overflow: auto;
 }
-.main { overflow: auto; position: relative; }
+.main { overflow: auto; position: relative; display: flex; flex-direction: column; } /* a page can fill it (topic page) */
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px; color: var(--text); font-size: 16px; letter-spacing: -0.01em; }
 .brand:hover { text-decoration: none; }

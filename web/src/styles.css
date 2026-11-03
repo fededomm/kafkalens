@@ -115,6 +115,9 @@ code, .mono { font-family: var(--mono); font-size: 12.5px; }
 
 /* ---------- surfaces ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+/* in a page that fills the window (topic page): the card shrinks to the room left and its table scrolls inside */
+.card.fit { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.card.fit .table-wrap { min-height: 0; }
 .card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
 
 .stat { padding: 16px 18px; display: grid; gap: 6px; grid-template-rows: 1fr auto; }
