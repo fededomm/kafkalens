@@ -1,6 +1,9 @@
 package api
 
 import (
+	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -23,7 +26,7 @@ func (a *API) listGroups(r *http.Request, c cctx) (any, error) {
 	if len(lg) == 0 {
 		return out, nil
 	}
-	lags, err := c.adm.Lag(ctx, lg.Groups()...)
+	lags, err := groupLags(ctx, c.adm, lg.Groups()...)
 	if err != nil {
 		return nil, err
 	}
@@ -45,9 +48,48 @@ func (a *API) listGroups(r *http.Request, c cctx) (any, error) {
 	return out, nil
 }
 
+// groupLags is kadm's Lag without its all-or-nothing auth errors: there one topic we may not describe
+// (or one group we may not read) fails every group, here it only leaves that topic without lag.
+func groupLags(ctx context.Context, adm *kadm.Client, groups ...string) (kadm.DescribedGroupLags, error) {
+	described, derr := adm.DescribeGroups(ctx, groups...)
+	if len(described) == 0 && derr != nil {
+		return nil, derr
+	}
+	fetched := adm.FetchManyOffsets(ctx, groups...)
+	ps := described.AssignedPartitions()
+	ps.MergeTopics(described.JoinTopics())
+	ps.Merge(fetched.CommittedPartitions())
+	// naming a topic we may not describe fails the whole offsets listing: keep only the visible ones
+	// (all-topics metadata leaves the others out, uncached like listTopics)
+	visible, err := adm.ListTopicsWithInternal(kadm.WithAuthorizedOps(ctx))
+	if err != nil {
+		return nil, err
+	}
+	topics := slices.DeleteFunc(ps.Topics(), func(t string) bool { return !visible.Has(t) })
+	var starts, ends kadm.ListedOffsets
+	if len(topics) > 0 { // no topics would list them all
+		starts, _ = adm.ListStartOffsets(ctx, topics...) // failures show up as partitions without lag
+		ends, _ = adm.ListEndOffsets(ctx, topics...)
+	}
+	lags := kadm.DescribedGroupLags{}
+	for _, name := range groups {
+		g, ok := described[name]
+		if !ok { // its describe shard failed
+			g = kadm.DescribedGroup{Group: name, Err: cmp.Or(derr, errors.New("not described"))}
+		}
+		f := fetched[name]
+		lags[name] = kadm.DescribedGroupLag{
+			Group: name, Coordinator: g.Coordinator, State: g.State, ProtocolType: g.ProtocolType, Protocol: g.Protocol,
+			Members: g.Members, DescribeErr: g.Err, FetchErr: f.Err,
+			Lag: kadm.CalculateGroupLagWithStartOffsets(g, f.Fetched, starts, ends),
+		}
+	}
+	return lags, nil
+}
+
 func (a *API) groupDetail(r *http.Request, c cctx) (any, error) {
 	name := pathParam(r, "group")
-	lags, err := c.adm.Lag(r.Context(), name)
+	lags, err := groupLags(r.Context(), c.adm, name)
 	if err != nil {
 		return nil, err
 	}

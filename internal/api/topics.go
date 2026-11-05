@@ -22,8 +22,8 @@ type topicRow struct {
 
 func (a *API) listTopics(r *http.Request, c cctx) (any, error) {
 	ctx := r.Context()
-	// Bypass the client's metadata cache: Lag (groups list) caches topics of other
-	// groups we may not be authorized on, and a cached TOPIC_AUTHORIZATION_FAILED fails the whole list.
+	// Bypass the client's metadata cache: a cached TOPIC_AUTHORIZATION_FAILED (an earlier request
+	// naming a topic we may not describe) fails the whole list.
 	ts, err := c.adm.ListTopicsWithInternal(kadm.WithAuthorizedOps(ctx))
 	if err != nil {
 		return nil, err

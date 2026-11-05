@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-05
+
+### Fixed
+
+- **Consumer groups load when some topics are off-limits.** With ACLs, one topic the user may not describe, committed to by any group, failed the whole Consumer groups page (and the MCP `list_consumer_groups`) with `TOPIC_AUTHORIZATION_FAILED`. The same went for the page of a group reading such a topic. Now these topics only count no lag; the rest of the list shows.
+
 ## [0.7.0] - 2026-11-03
 
 ### Added
@@ -115,6 +121,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.7.1]: https://github.com/fededomm/kafkalens/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/fededomm/kafkalens/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/fededomm/kafkalens/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/fededomm/kafkalens/compare/v0.6.0...v0.6.1
