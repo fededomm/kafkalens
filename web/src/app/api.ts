@@ -171,6 +171,8 @@ export class Folders {
     return this.byCluster()[cluster]?.[folder]?.find((e) => e.endsWith('*') && Folders.startsWith(topic, e.slice(0, -1)));
   }
 
+  rules(cluster: string, folder: string) { return this.byCluster()[cluster]?.[folder]?.filter((e) => e.endsWith('*')) ?? []; }
+
   /** Adds or removes topics or rules; adding to an unknown folder creates it, removing the last entry drops it. */
   put(cluster: string, folder: string, topics: string[], on: boolean) {
     const fs = { ...this.byCluster()[cluster] }, drop = new Set(topics);

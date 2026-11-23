@@ -49,6 +49,7 @@ const PAGE = 200;
               @for (f of folderNames(); track f) { <option [value]="f">{{ f }}</option> }
             </select>
             @if (folder()) {
+              <button class="btn ghost sm" (click)="openEdit()" title="Add or remove topics of this folder"><app-icon name="edit" /> Edit</button>
               <button class="btn ghost sm" (click)="truncate(folderTopics(), folder())" [disabled]="readOnly() || busy() || !folderTopics().length"
                 title="Delete all messages of every topic in this folder, keep the topics">Delete messages</button>
               <button class="btn ghost icon sm" (click)="dropFolder()" title="Delete folder" [attr.aria-label]="'Delete folder ' + folder()"><app-icon name="trash" /></button>
@@ -150,6 +151,35 @@ const PAGE = 200;
   </div>
 </dialog>
 
+<dialog #editDlg class="dlg edit" (close)="closedEdit()">
+  <div class="dlg-head">
+    <div><h2>{{ editing() }}</h2><p>Check the topics to keep in this folder. Saved in this browser.</p></div>
+    <button type="button" class="btn ghost icon sm" (click)="editDlg.close()" aria-label="Close"><app-icon name="x" /></button>
+  </div>
+  <div class="dlg-body">
+    @for (r of editRules(); track r) {
+      <div class="row rule">
+        <span>Every topic starting with <b class="mono">{{ r.slice(0, -1) }}</b></span>
+        <button type="button" class="btn ghost icon sm" (click)="folders.put(id(), editing(), [r], false)" title="Remove rule" [attr.aria-label]="'Remove rule ' + r"><app-icon name="x" /></button>
+      </div>
+    }
+    <div class="pick-list">
+      <input class="input" [(ngModel)]="pickQ" placeholder="Filter…" aria-label="Filter topics" autocomplete="off" />
+      @if (editFree().length) {
+        <label class="check all"><input type="checkbox" [checked]="editAll()" (change)="folders.put(id(), editing(), editFree(), $any($event.target).checked)" /> Select all ({{ editFree().length | num }})</label>
+      }
+      @for (t of editMatching().slice(0, PAGE); track t) {
+        @let rule = folders.rule(id(), editing(), t);
+        <label class="check" [title]="rule ? 'Held by the rule ' + rule : ''">
+          <input type="checkbox" [checked]="folders.has(id(), editing(), t)" (change)="folders.put(id(), editing(), [t], $any($event.target).checked)" [disabled]="!!rule" />
+          <span class="mono">{{ t }}</span>
+        </label>
+      } @empty { <span class="hint">No topics match</span> }
+      @if (editMatching().length > PAGE) { <span class="hint">First {{ PAGE }} shown, filter to find more</span> }
+    </div>
+  </div>
+</dialog>
+
 <dialog #prefixDlg class="dlg">
   <form (ngSubmit)="createPrefixFolder()" #pf="ngForm">
     <div class="dlg-head">
@@ -205,6 +235,8 @@ tr .row-act.on { opacity: 1; color: var(--accent); }
 .pick summary::-webkit-details-marker { display: none; }
 .pick-list { margin-top: 6px; padding: 8px; display: grid; gap: 6px; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .pick-list .all { padding-bottom: 6px; border-bottom: 1px solid var(--border); font-weight: 500; }
+.rule { justify-content: space-between; }
+.edit .pick-list { max-height: 50vh; }
 `,
 })
 export class TopicsPage {
@@ -217,6 +249,7 @@ export class TopicsPage {
   private readonly router = inject(Router);
   private readonly folderDlg = viewChild.required<ElementRef<HTMLDialogElement>>('folderDlg');
   private readonly prefixDlg = viewChild.required<ElementRef<HTMLDialogElement>>('prefixDlg');
+  private readonly editDlg = viewChild.required<ElementRef<HTMLDialogElement>>('editDlg');
 
   protected readonly res = resource({ params: () => this.id(), loader: ({ params }) => this.api.get<TopicRow[]>(`/c/${params}/topics`) });
   protected readonly topics = computed(() => (this.res.hasValue() ? this.res.value() : null));
@@ -259,6 +292,20 @@ export class TopicsPage {
   protected readonly allSel = computed(() => this.selectable().length > 0 && this.selectable().every((t) => this.sel().has(t)));
   // the whole folder, whatever the search and favorites filters
   protected readonly folderTopics = computed(() => (this.topics() ?? []).filter((t) => !t.internal && this.folders.has(this.id(), this.folder(), t.name)));
+  // the folder edited in its dialog: unchecking its last topic drops it from folder()
+  protected readonly editing = signal('');
+  // its topics when the dialog opened come first, so rows don't jump while checking
+  private readonly editFirst = signal(new Set<string>());
+  protected readonly editRules = computed(() => this.folders.rules(this.id(), this.editing()));
+  protected readonly editMatching = computed(() => {
+    const q = this.pickQ().trim().toLowerCase(), first = this.editFirst();
+    return (this.topics() ?? [])
+      .filter((t) => (this.showInternal() || !t.internal) && t.name.toLowerCase().includes(q)).map((t) => t.name)
+      .sort((a, b) => Number(first.has(b)) - Number(first.has(a)) || a.localeCompare(b));
+  });
+  // topics a prefix rule holds can't be taken out one by one
+  protected readonly editFree = computed(() => this.editMatching().filter((t) => !this.folders.rule(this.id(), this.editing(), t)));
+  protected readonly editAll = computed(() => this.editFree().length > 0 && this.editFree().every((t) => this.folders.has(this.id(), this.editing(), t)));
   protected readonly busy = signal(false);
   protected readonly readOnly = computed(() => this.api.clusters().find((c) => c.id === this.id())?.readOnly ?? false);
 
@@ -334,6 +381,16 @@ export class TopicsPage {
     this.folder.set(name);
     this.prefixDlg().nativeElement.close();
   }
+
+  openEdit() {
+    this.editing.set(this.folder());
+    this.editFirst.set(new Set(this.folderTopics().map((t) => t.name)));
+    this.pickQ.set('');
+    this.editDlg().nativeElement.showModal();
+  }
+
+  // back in the selector when the folder was emptied and filled again
+  closedEdit() { if (this.folderNames().includes(this.editing())) this.folder.set(this.editing()); }
 
   async dropFolder() {
     const f = this.folder();

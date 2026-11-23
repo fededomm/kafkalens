@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Add or remove topics of a folder.** Pick a folder and use **Edit**: a checkbox per topic, the folder's topics first, with a filter and **Select all** for the topics it matches. The folder's prefix rules are listed with a button to remove them; topics a rule holds stay checked until the rule goes. Unchecking every topic deletes the folder as before; checking one again before closing brings it back.
+
 ## [0.7.1] - 2026-11-05
 
 ### Fixed
