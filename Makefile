@@ -1,3 +1,5 @@
+REMOTE ?= origin
+
 .PHONY: build web run dev kafka clean desktop desktop-windows desktop-macos
 
 build: web            ## single binary with the UI embedded
@@ -38,3 +40,10 @@ desktop-macos:        ## on a Mac: universal KafkaLens.app + drag-to-Application
 
 clean:
 	rm -rf bin web/dist build/bin
+
+retag:
+	@git diff --quiet HEAD || { echo "modifiche non committate: il tag non le includerebbe, prima committa"; exit 1; }
+	-git tag -d $(TAG)
+	-git push --delete $(REMOTE) $(TAG)
+	git tag $(TAG)
+	git push $(REMOTE) $(TAG)
