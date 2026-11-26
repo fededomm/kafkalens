@@ -3,7 +3,19 @@
 All notable changes to KafkaLens are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.3] - 2026-11-26
+
+### Added
+
+- **Docker image.** `docker run -d -p 127.0.0.1:8093:8093 -v kafkalens-data:/data fededomm/kafkalens` serves the browser mode on `http://localhost:8093`, with MCP at `/mcp`; saved connections and the MCP token are kept in the `/data` volume. Images for amd64 and arm64 are published to Docker Hub at every release (`0.7.3`, `0.7` and `latest`). As in browser mode, only `localhost` is answered: LAN access is not supported. Inside the container `localhost` is the container itself: reach brokers running on the host through `host.docker.internal`.
+- **KafkaLens in `docker-compose.yml`.** `docker compose up -d` also starts KafkaLens on `http://localhost:8093` next to the 3-broker development cluster; from inside it, the cluster's bootstrap is `kafka1:19092,kafka2:19092,kafka3:19092`. `make kafka` still starts the brokers only.
+- `make retag TAG=v0.7.3` moves a release tag to the current commit and pushes it again, so the release workflows run again; it refuses while there are uncommitted changes.
+
+### Changed
+
+- **Go 1.27.4** (previously 1.27.3), franz-go 1.22.3 and `kadm` 1.20.0 (previously 1.22.2 and 1.19.0).
+
+## [0.7.2] - 2026-11-23
 
 ### Added
 
@@ -125,6 +137,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Faster topic list on large clusters.** The list now renders 200 rows at a time, with a **Show more** button at the bottom. Toggling filters on a cluster with 10,000 topics went from about 2 s to about 50 ms, and the time no longer grows with the number of topics. Search, filters, sorting and the topic count still cover every topic.
 
+[0.7.3]: https://github.com/fededomm/kafkalens/compare/v0.7.2...v0.7.3
+[0.7.2]: https://github.com/fededomm/kafkalens/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/fededomm/kafkalens/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/fededomm/kafkalens/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/fededomm/kafkalens/compare/v0.6.1...v0.6.2
