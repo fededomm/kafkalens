@@ -1,0 +1,16 @@
+.git
+.github
+.claude
+bin
+build
+docs
+scripts
+tmp
+web/node_modules
+web/dist
+web/.angular
+web/wailsjs
+clusters.json
+*.pem
+*.key
+.env*

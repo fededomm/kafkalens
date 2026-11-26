@@ -14,7 +14,7 @@ dev:                  ## backend on :8088 + ng serve on :4200 (proxied)
 	go run . -no-open & cd web && npx ng serve
 
 kafka:                ## local Kafka on localhost:9092
-	docker compose up -d
+	docker compose up -d kafka1 kafka2 kafka3
 
 # Desktop app (Wails): same UI and API in a native window; its only TCP port is MCP on loopback.
 # macOS must be built on a Mac: see .github/workflows/desktop.yml.
